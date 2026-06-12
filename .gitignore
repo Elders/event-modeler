@@ -1,0 +1,10 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# Credentials — never commit
+Miro creds.txt
+
+# Personal Claude Code permissions (settings.local.json is already *.local)
+.claude/
