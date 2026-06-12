@@ -8,6 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm start` / `npm run dev` — Vite dev server on port 3000 (the app's registered App URL).
 - `npm run typecheck` — `tsc` only.
 
+Git: commit messages must NOT contain `Co-Authored-By` or any AI-attribution trailer (user rule).
+
 To see changes in Miro: the app must be registered once (README has the steps; App URL `http://localhost:3000`, scopes `boards:read` + `boards:write`). After panel changes, close and reopen the panel; after changes to `src/index.ts` or anything it pulls in (`board.ts`), the whole **board tab must be refreshed** — the headless page only reloads with it. One-time listener registrations are guarded by `window` flags and survive HMR. `Miro creds.txt` in the root holds credentials; never read, modify, or commit it.
 
 ## What this is
