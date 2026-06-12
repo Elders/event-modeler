@@ -1,0 +1,41 @@
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  flex: none;
+}
+
+.glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.glyph-automation {
+  border: 1.5px solid var(--em-purple-light);
+  border-radius: 6px;
+  color: var(--em-purple);
+  font-size: 14px;
+}
+
+.glyph-screen {
+  border: 1.5px dashed #b4b2a9;
+  color: #5f5e5a;
+  font-size: 13px;
+}
+
+.glyph-slice {
+  border: 1.5px solid #b4b2a9;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 3px;
+}
+
+.slice-tab {
+  width: 10px;
+  height: 3px;
+  border-radius: 1px;
+  background: #8e8e9c;
+}

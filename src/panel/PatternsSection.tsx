@@ -1,5 +1,6 @@
 // One-click stamps for the four event-modeling patterns.
 
+import './PatternsSection.css';
 import { stampPattern, type PatternId } from '../features/patterns';
 import { Dot, type DotKind } from './Dot';
 import type { Guard } from './useBusyGuard';

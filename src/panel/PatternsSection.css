@@ -1,0 +1,47 @@
+.pattern-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.pattern-row:hover {
+  border-color: #b6b6c8;
+}
+
+.pattern-row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.pattern-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.pattern-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--em-ink);
+}
+
+.plus {
+  color: #4262ff;
+  font-size: 15px;
+  font-weight: 500;
+}

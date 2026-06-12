@@ -1,5 +1,6 @@
 // The panel: composes the section components and owns the shared busy guard.
 
+import './Panel.css';
 import { BuildingBlocksSection } from './BuildingBlocksSection';
 import { PatternsSection } from './PatternsSection';
 import { ScreensSection } from './ScreensSection';

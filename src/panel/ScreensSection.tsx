@@ -1,5 +1,6 @@
 // Screen tools: upload a capture or drop a blank sketch surface.
 
+import './ScreensSection.css';
 import { useRef, type ChangeEvent } from 'react';
 import { createBlockAtCenter } from '../features/createBlock';
 import { placeScreenImage } from '../features/screens';

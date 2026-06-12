@@ -1,5 +1,6 @@
 // The mini color dots used by pattern-stamp rows.
 
+import './Dot.css';
 import type { BlockType } from '../blocks';
 
 export type DotKind = BlockType | 'sketch' | 'gear';

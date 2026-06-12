@@ -21,13 +21,13 @@ Two entry pages, both declared as Vite build inputs:
 
 ## Code organization — everything is a component
 
-**Rule (user-mandated): every new piece of functionality is its own module/component.** Never grow an existing file into a god-file; `board.ts` once held everything and was deliberately split.
+**Rule (user-mandated): every new piece of functionality is its own module/component, with its styles in a co-located plain `.css` file imported by the component.** (Plain CSS, not CSS Modules — class names are global because of the dynamic `bg-<type>` classes and the Mirotone/`miro-draggable` interplay.) Never grow an existing file into a god-file; `board.ts` and the monolithic `style.css` once held everything and were deliberately split.
 
 - `src/blocks.ts` — the event-modeling vocabulary (block types, labels, sticky colors).
 - `src/miro/` — shared SDK plumbing: `helpers.ts` (types, predicates, viewport, settle, titles, error toast), `appData.ts` (registry persistence, `FrameRecord`), `icons.ts` (SVG icons shared across features).
 - `src/features/` — one module per board feature: `stickies`, `automation`, `screens`, `slices`, `createBlock` (dispatcher), `connectors`, `patterns`, `swimlanes`.
 - `src/features/specs/` — the specification feature, itself componentized: `model` (geometry, registries), `create`, `copies` (linked copies + sync), `reflow`, `selection` (+ buttons, size watcher), `housekeeping` (background tick composition).
-- `src/panel/` — React components: `Panel` composes one component per panel section (`BuildingBlocksSection`, `ScreensSection`, `PatternsSection`, `SpecificationsSection`, `SwimlanesSection`), plus `Swatch`, `Dot`, `useBusyGuard` (shared busy/guard state), and `registerDropHandler`.
+- `src/panel/` — React components: `Panel` composes one component per panel section (`BuildingBlocksSection`, `ScreensSection`, `PatternsSection`, `SpecificationsSection`, `SwimlanesSection`), plus `Swatch`, `Dot`, `useBusyGuard` (shared busy/guard state), and `registerDropHandler`. Each component imports its own `.css`; `Panel.css` holds the shared section primitives (`.section`, `.footnote`, `.w-full`), and `src/style.css` keeps only design tokens and the `bg-*` vocabulary colors.
 
 Import direction: panel → features → miro; the headless `index.ts` → features → miro. Features never import from `panel/`; `specs/selection.ts` and `specs/housekeeping.ts` are the only modules that reach across into `slices.ts` (the size watcher and background tick serve both).
 

@@ -1,5 +1,6 @@
 // The draggable palette of event-modeling building blocks.
 
+import './BuildingBlocksSection.css';
 import { useRef } from 'react';
 import { BLOCKS } from '../blocks';
 import { createBlockAtCenter } from '../features/createBlock';

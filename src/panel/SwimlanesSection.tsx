@@ -1,5 +1,6 @@
 // Board setup: insert the three-lane swimlane guides.
 
+import './SwimlanesSection.css';
 import { insertSwimlanes } from '../features/swimlanes';
 import type { Guard } from './useBusyGuard';
 
