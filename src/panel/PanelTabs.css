@@ -1,0 +1,36 @@
+/* The panel's tab bar. Sticks to the top so the tabs stay reachable while the
+   active tab's (often long) content scrolls beneath them. */
+
+.panel-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+  padding-top: 10px;
+  background: #fff;
+  border-bottom: 1px solid var(--em-line);
+}
+
+.panel-tab {
+  flex: 1;
+  padding: 8px 10px;
+  margin-bottom: -1px; /* overlap the bar's border so the active underline sits on it */
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--em-muted);
+  cursor: pointer;
+}
+
+.panel-tab:hover {
+  color: var(--em-ink);
+}
+
+.panel-tab-active {
+  color: var(--em-ink);
+  border-bottom-color: #4262ff;
+}

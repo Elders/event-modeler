@@ -1,9 +1,10 @@
 # Miro Event Modeler
 
 A [Miro](https://miro.com) app for [event modeling](https://eventmodeling.org), built on the
-**Web SDK v2** with **React + TypeScript**. The toolbar icon opens a panel with:
+**Web SDK v2** with **React + TypeScript**. The toolbar icon opens a panel split
+into two tabs — **Build** (the manual modeling palette) and **Generate** (AI):
 
-- **Generate from text** — paste a description of a system or workflow and an AI
+- **Generate from text** *(Generate tab)* — paste a description of a system or workflow and an AI
   agent (Claude) drafts a whole model: typed blocks laid out in the three lanes,
   connectors, grouped into slices, with Given/When/Then specifications. Enter
   your own Anthropic API key in the section's **Settings** (stored only in this
