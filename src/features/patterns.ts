@@ -1,11 +1,12 @@
-// Pattern stamps: the four event-modeling patterns as pre-linked slices.
+// Pattern stamps: the four event-modeling patterns as pre-linked groups.
 // Columns step along the timeline; lanes are screens (-1), commands & read
 // models (0), events (1).
 
-import type { BlockType } from '../blocks';
-import { ensureVisible, viewportCenter } from '../miro/helpers';
+import type { BlockType } from '../domain/vocabulary';
+import type { CanvasElement } from '../ports/canvas';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
+import { ensureVisible, viewportCenter } from './helpers';
 
 export type PatternId = 'command' | 'view' | 'automation' | 'translation';
 
@@ -67,13 +68,13 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
   },
 };
 
-export async function stampPattern(id: PatternId) {
+export async function stampPattern(id: PatternId): Promise<CanvasElement[]> {
   const { x: cx, y: cy } = await viewportCenter();
   const { nodes, links } = PATTERNS[id];
   const cols = nodes.map((n) => n.col);
   const midCol = (Math.min(...cols) + Math.max(...cols)) / 2;
 
-  const items: Awaited<ReturnType<typeof createBlock>>[] = [];
+  const items: CanvasElement[] = [];
   for (const node of nodes) {
     items.push(
       await createBlock(
@@ -87,7 +88,7 @@ export async function stampPattern(id: PatternId) {
     try {
       await connect(items[from].id, items[to].id);
     } catch (error) {
-      // Not every item type accepts connectors; keep the blocks regardless.
+      // Not every element type accepts links; keep the blocks regardless.
       console.warn('Could not link stamped items', error);
     }
   }

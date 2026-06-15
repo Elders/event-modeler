@@ -1,9 +1,8 @@
-// No shape or style overrides: stamped arrows use Miro's SDK defaults, so
-// they are indistinguishable from manually drawn ones.
+// Links use the canvas default style — zero overrides — so a generated link is
+// indistinguishable from a hand-drawn one.
 
-export async function connect(fromId: string, toId: string) {
-  return miro.board.createConnector({
-    start: { item: fromId },
-    end: { item: toId },
-  });
+import { services } from '../services';
+
+export async function connect(fromId: string, toId: string): Promise<void> {
+  await services().canvas.createLink(fromId, toId);
 }

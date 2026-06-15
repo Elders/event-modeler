@@ -1,14 +1,16 @@
-// Linked shallow copies: stickies copied into a spec zone, native-linked back
-// to their originals, with a one-way content/color sync from source to copy.
+// Linked shallow copies: cards copied into a spec zone, carrying a navigable
+// reference back to their originals, with a one-way content/color sync from
+// source to copy.
 
-import { readAppData, writeAppData } from '../../miro/appData';
-import { itemDeepLink, type FrameItem, type StickyItem } from '../../miro/helpers';
+import type { CanvasElement, ElementPatch } from '../../ports/canvas';
+import { services } from '../../services';
 import {
   LINKS_KEY,
   SPECS_KEY,
-  SPEC_COPY_GAP,
   SPEC_COPY_WIDTH,
+  copyOffset,
   readSpecRecords,
+  requiredZoneHeight,
   specColumns,
   zoneExtent,
   zoneHeightsOf,
@@ -16,122 +18,101 @@ import {
   type SpecZoneId,
 } from './model';
 
-// Creates linked shallow copies of the given stickies inside one spec zone.
+// Creates linked shallow copies of the given cards inside one spec zone.
 export async function placeLinkedCopies(
-  spec: FrameItem,
+  spec: CanvasElement,
   zoneId: SpecZoneId,
-  sources: StickyItem[],
+  sources: CanvasElement[],
 ): Promise<number> {
+  const { canvas, store } = services();
   const records = await readSpecRecords();
   const record = records.find((entry) => entry.frame === spec.id);
-  const heights = zoneHeightsOf(record);
+  const heights = zoneHeightsOf(record?.zones);
   const zone = zoneExtent(heights, zoneId);
 
-  const children = await spec.getChildren();
+  const children = await canvas.childrenOf(spec.id);
   let occupied = children.filter(
-    (child) =>
-      child.type === 'sticky_note' &&
-      'y' in child &&
-      typeof child.y === 'number' &&
-      child.y >= zone.top &&
-      child.y < zone.top + zone.height,
+    (child) => child.kind === 'card' && child.y >= zone.top && child.y < zone.top + zone.height,
   ).length;
 
   const columns = specColumns(spec.width);
 
   // Grow the zone (and the frame, downward) when the new copies won't fit;
-  // everything below the zone shifts down by the same amount.
-  const rows = Math.ceil((occupied + sources.length) / columns);
-  const required = 40 + rows * (SPEC_COPY_WIDTH + 16) + 12;
+  // everything below the zone shifts down by the same amount. The top edge
+  // stays in place.
+  let workingSpec = spec;
+  const required = requiredZoneHeight(occupied + sources.length, columns);
   if (required > zone.height) {
     const delta = required - zone.height;
-    spec.height += delta;
-    spec.y += delta / 2; // keep the top edge in place
-    await spec.sync();
+    await canvas.apply([{ id: spec.id, y: spec.y + delta / 2, height: spec.height + delta }]);
     const boundary = zone.top + zone.height;
-    for (const child of children) {
-      const movable = child as unknown as { y: number; sync: () => Promise<unknown> };
-      if (typeof movable.y === 'number' && movable.y >= boundary) {
-        movable.y += delta;
-        await movable.sync();
-      }
-    }
+    const shifts: ElementPatch[] = children
+      .filter((child) => child.y >= boundary)
+      .map((child) => ({ id: child.id, y: child.y + delta }));
+    if (shifts.length > 0) await canvas.apply(shifts);
     heights[zoneId] = required;
     if (record) {
       record.zones = heights;
-      await writeAppData(SPECS_KEY, records);
+      await store.write(SPECS_KEY, records);
     }
+    workingSpec = { ...spec, y: spec.y + delta / 2, height: spec.height + delta };
   }
 
-  const links = await readAppData<SpecLink[]>(LINKS_KEY, []);
-  const specTop = spec.y - spec.height / 2;
-  const specLeft = spec.x - spec.width / 2;
+  const links = await store.read<SpecLink[]>(LINKS_KEY, []);
+  const specTop = workingSpec.y - workingSpec.height / 2;
+  const specLeft = workingSpec.x - workingSpec.width / 2;
   for (const source of sources) {
-    const column = occupied % columns;
-    const row = Math.floor(occupied / columns);
-    const relX = 130 + column * (SPEC_COPY_WIDTH + SPEC_COPY_GAP);
-    const relY = zone.top + 40 + SPEC_COPY_WIDTH / 2 + row * (SPEC_COPY_WIDTH + 16);
-    const deepLink = await itemDeepLink(source.id);
-    const copy = await miro.board.createStickyNote({
-      x: specLeft + relX,
-      y: specTop + relY,
-      shape: 'square',
+    const offset = copyOffset(zone.top, occupied, columns);
+    const link = await canvas.deepLink(source.id);
+    const copy = await canvas.createCard({
+      x: specLeft + offset.x,
+      y: specTop + offset.y,
       width: SPEC_COPY_WIDTH,
-      content: source.content,
-      style: { fillColor: source.style.fillColor },
-      ...(deepLink ? { linkedTo: deepLink } : {}),
+      content: source.content ?? '',
+      color: source.color ?? 'orange',
+      ...(link ? { link } : {}),
     });
-    try {
-      await spec.add(copy);
-      copy.x = relX;
-      copy.y = relY;
-      await copy.sync();
-    } catch (error) {
-      console.warn('Could not attach a copy to the specification frame', error);
-    }
+    await canvas.addToContainer(spec.id, copy.id, offset.x, offset.y);
     links.push({ source: source.id, copy: copy.id, spec: spec.id });
     occupied += 1;
   }
-  await writeAppData(LINKS_KEY, links);
+  await store.write(LINKS_KEY, links);
   return sources.length;
 }
 
-// One-way sync: edits to a source sticky propagate to its spec copies. The
-// SDK has no item-update or item-delete events, so housekeeping polls this.
-export async function syncSpecCopies() {
+// One-way sync: edits to a source card propagate to its spec copies. There are
+// no item-update or item-delete events, so housekeeping polls this.
+export async function syncSpecCopies(): Promise<void> {
+  const { canvas, store } = services();
   try {
-    const links = await readAppData<SpecLink[]>(LINKS_KEY, []);
+    const links = await store.read<SpecLink[]>(LINKS_KEY, []);
     if (links.length === 0) return;
     const ids = [...new Set(links.flatMap((link) => [link.source, link.copy]))];
-    const items = await miro.board.get({ id: ids });
+    const items = await canvas.get(ids);
     const byId = new Map(items.map((item) => [item.id, item]));
-    type FetchedItem = (typeof items)[number];
-    const isSticky = (
-      item: FetchedItem | undefined,
-    ): item is Extract<FetchedItem, { type: 'sticky_note' }> =>
-      !!item && item.type === 'sticky_note' && 'content' in item;
 
     const alive: SpecLink[] = [];
+    const patches: ElementPatch[] = [];
     let pruned = false;
     for (const link of links) {
       const source = byId.get(link.source);
       const copy = byId.get(link.copy);
-      if (!isSticky(copy)) {
+      if (!copy || copy.kind !== 'card') {
         pruned = true; // the copy was deleted; forget the link
         continue;
       }
       alive.push(link);
-      if (!isSticky(source)) continue;
-      if (
-        source.content !== copy.content ||
-        source.style.fillColor !== copy.style.fillColor
-      ) {
-        copy.content = source.content;
-        copy.style.fillColor = source.style.fillColor;
-        await copy.sync();
+      if (!source || source.kind !== 'card') continue;
+      if (source.content !== copy.content || source.color !== copy.color) {
+        patches.push({
+          id: copy.id,
+          content: source.content ?? '',
+          ...(source.color ? { color: source.color } : {}),
+        });
       }
     }
-    if (pruned) await writeAppData(LINKS_KEY, alive);
+    if (patches.length > 0) await canvas.apply(patches);
+    if (pruned) await store.write(LINKS_KEY, alive);
   } catch (error) {
     console.warn('Spec copy sync failed', error);
   }

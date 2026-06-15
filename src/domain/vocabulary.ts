@@ -1,9 +1,9 @@
-// The event-modeling vocabulary: every block the app can place on the board.
+// The event-modeling vocabulary: every block the tool can place, with its
+// conventional color. This is pure domain knowledge — no canvas platform is
+// referenced here, so it ports unchanged to any host application.
 //
-// The four sticky-note blocks map 1:1 onto Miro's fixed sticky-note palette,
-// so models built with the app are indistinguishable from hand-placed stickies.
-// Automation and screens are not sticky notes (gear shape / sketch frame or
-// image) and are created differently in board.ts.
+// The four sticky-note colors are the conventional event-modeling palette;
+// adapters map them onto whatever native colors their canvas provides.
 
 export type BlockType =
   | 'event'
@@ -20,15 +20,24 @@ export type StickyBlockType = Extract<
   'event' | 'command' | 'readModel' | 'externalEvent' | 'error'
 >;
 
-export const STICKY_COLORS: Record<
-  StickyBlockType,
-  'orange' | 'blue' | 'light_green' | 'yellow' | 'red'
-> = {
+// The conventional event-modeling colors. Adapters translate these to native
+// canvas colors (e.g. Miro's fixed sticky palette).
+export type CardColor = 'orange' | 'blue' | 'light_green' | 'yellow' | 'red';
+
+export const STICKY_COLORS: Record<StickyBlockType, CardColor> = {
   event: 'orange',
   command: 'blue',
   readModel: 'light_green',
   externalEvent: 'yellow',
   error: 'red',
+};
+
+export const STICKY_LABEL: Record<StickyBlockType, string> = {
+  event: 'Event',
+  command: 'Command',
+  readModel: 'Read model',
+  externalEvent: 'External event',
+  error: 'Error',
 };
 
 export interface BlockDef {

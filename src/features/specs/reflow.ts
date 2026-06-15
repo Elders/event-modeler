@@ -1,23 +1,25 @@
 // Re-grids a resized spec: recomputes columns from the current width, packs
-// each zone's copies, recomputes zone heights, realigns the labels and +
-// buttons, and resizes the frame. Triggered by the fast size watcher (and
+// each zone's copies, recomputes zone heights, realigns the labels and "+"
+// buttons, and resizes the container. Triggered by the fast size watcher (and
 // the housekeeping tick as a fallback); the flag stops the two overlapping.
 
-import { writeAppData, type FrameRecord } from '../../miro/appData';
-import { META_KEY, type FrameItem } from '../../miro/helpers';
-import { SPEC_ADD_SIZE } from '../../miro/icons';
+import type { FrameRecord } from '../../domain/records';
+import type { CanvasElement, ElementPatch } from '../../ports/canvas';
+import { services } from '../../services';
 import {
   DEFAULT_ZONE_HEIGHTS,
   SPECS_KEY,
-  SPEC_COPY_GAP,
-  SPEC_COPY_WIDTH,
   SPEC_GAP,
   SPEC_MARGIN,
   SPEC_ZONES,
+  copyOffset,
+  requiredZoneHeight,
   specColumns,
   specFrameHeight,
   zoneExtent,
   zoneHeightsOf,
+  zoneLabelOffset,
+  zonePlusOffset,
   type SpecZoneId,
   type ZoneHeights,
 } from './model';
@@ -25,10 +27,10 @@ import {
 let reflowInProgress = false;
 
 export async function reflowSpecFrame(
-  spec: FrameItem,
+  spec: CanvasElement,
   record: FrameRecord,
   records: FrameRecord[],
-) {
+): Promise<void> {
   if (reflowInProgress) return;
   reflowInProgress = true;
   try {
@@ -38,9 +40,14 @@ export async function reflowSpecFrame(
   }
 }
 
-async function doReflowSpecFrame(spec: FrameItem, record: FrameRecord, records: FrameRecord[]) {
-  const heights = zoneHeightsOf(record);
-  const children = await spec.getChildren();
+async function doReflowSpecFrame(
+  spec: CanvasElement,
+  record: FrameRecord,
+  records: FrameRecord[],
+): Promise<void> {
+  const { canvas, store } = services();
+  const heights = zoneHeightsOf(record.zones);
+  const children = await canvas.childrenOf(spec.id);
   const chromeIds = new Set(record.labels);
 
   // Assign each copy to a zone by its current position (split mid-gap).
@@ -52,74 +59,60 @@ async function doReflowSpecFrame(spec: FrameItem, record: FrameRecord, records: 
     }
     return 'then';
   };
-  type Movable = { id: string; x: number; y: number; sync(): Promise<unknown> };
-  const copies: Record<SpecZoneId, Movable[]> = { given: [], when: [], then: [] };
+  const copies: Record<SpecZoneId, CanvasElement[]> = { given: [], when: [], then: [] };
   for (const child of children) {
-    if (child.type !== 'sticky_note') continue;
-    const movable = child as unknown as Movable;
-    copies[zoneOf(movable.y)].push(movable);
+    if (child.kind !== 'card') continue;
+    copies[zoneOf(child.y)].push(child);
   }
   for (const list of Object.values(copies)) list.sort((a, b) => a.y - b.y || a.x - b.x);
 
   const columns = specColumns(spec.width);
   const newHeights: ZoneHeights = { ...heights };
   for (const zone of SPEC_ZONES) {
-    const rows = Math.ceil(copies[zone.id].length / columns);
     newHeights[zone.id] = Math.max(
       DEFAULT_ZONE_HEIGHTS[zone.id],
-      40 + rows * (SPEC_COPY_WIDTH + 16) + 12,
+      requiredZoneHeight(copies[zone.id].length, columns),
     );
   }
 
-  // Grow before moving children, shrink after — children must never lie
-  // outside the frame bounds.
+  // Grow before moving children, shrink after — children must never lie outside
+  // the container bounds.
   const newFrameHeight = specFrameHeight(newHeights);
   const delta = newFrameHeight - spec.height;
   if (delta > 0) {
-    spec.height = newFrameHeight;
-    spec.y += delta / 2;
-    await spec.sync();
+    await canvas.apply([{ id: spec.id, y: spec.y + delta / 2, height: newFrameHeight }]);
   }
 
-  const moves: Promise<unknown>[] = [];
+  const moves: ElementPatch[] = [];
   for (const child of children) {
     if (!chromeIds.has(child.id)) continue;
     let zoneId: SpecZoneId | null = null;
-    if (child.type === 'text' && 'content' in child) {
-      const text = String((child as { content?: unknown }).content ?? '');
+    if (child.kind === 'text' && child.content) {
+      const text = child.content;
       zoneId = SPEC_ZONES.find((zone) => text.includes(zone.label))?.id ?? null;
-    } else if (child.type === 'image') {
-      try {
-        const meta = (await child.getMetadata(META_KEY)) as { zone?: SpecZoneId } | null;
-        zoneId = meta?.zone ?? null;
-      } catch {
-        zoneId = null;
-      }
+    } else if (child.kind === 'image') {
+      const meta = await canvas.getMeta(child.id);
+      zoneId = meta && meta.type === 'spec-add' ? meta.zone : null;
     }
     if (!zoneId) continue;
-    const movable = child as unknown as Movable;
-    movable.x = child.type === 'image' ? 24 + SPEC_ADD_SIZE / 2 : 128;
-    movable.y = zoneExtent(newHeights, zoneId).top + 16;
-    moves.push(movable.sync());
+    const { top } = zoneExtent(newHeights, zoneId);
+    const offset = child.kind === 'image' ? zonePlusOffset(top) : zoneLabelOffset(top);
+    moves.push({ id: child.id, x: offset.x, y: offset.y });
   }
   for (const zone of SPEC_ZONES) {
     const { top } = zoneExtent(newHeights, zone.id);
     copies[zone.id].forEach((copy, index) => {
-      copy.x = 130 + (index % columns) * (SPEC_COPY_WIDTH + SPEC_COPY_GAP);
-      copy.y =
-        top + 40 + SPEC_COPY_WIDTH / 2 + Math.floor(index / columns) * (SPEC_COPY_WIDTH + 16);
-      moves.push(copy.sync());
+      const offset = copyOffset(top, index, columns);
+      moves.push({ id: copy.id, x: offset.x, y: offset.y });
     });
   }
-  await Promise.all(moves);
+  await canvas.apply(moves);
 
   if (delta < 0) {
-    spec.height = newFrameHeight;
-    spec.y += delta / 2;
-    await spec.sync();
+    await canvas.apply([{ id: spec.id, y: spec.y + delta / 2, height: newFrameHeight }]);
   }
 
   record.zones = newHeights;
   record.width = spec.width;
-  await writeAppData(SPECS_KEY, records);
+  await store.write(SPECS_KEY, records);
 }

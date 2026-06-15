@@ -2,7 +2,7 @@
 
 import './BuildingBlocksSection.css';
 import { useRef } from 'react';
-import { BLOCKS } from '../blocks';
+import { BLOCKS } from '../domain/vocabulary';
 import { createBlockAtCenter } from '../features/createBlock';
 import { Swatch } from './Swatch';
 import type { Guard } from './useBusyGuard';

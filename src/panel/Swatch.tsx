@@ -1,7 +1,7 @@
 // The color/glyph swatch shown on a building-block tile.
 
 import './Swatch.css';
-import type { BlockType } from '../blocks';
+import type { BlockType } from '../domain/vocabulary';
 
 export function Swatch({ type }: { type: BlockType }) {
   if (type === 'automation') {

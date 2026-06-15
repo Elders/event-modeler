@@ -2,7 +2,7 @@
 // as toasts with the real reason.
 
 import { useState } from 'react';
-import { reportError } from '../miro/helpers';
+import { reportError } from '../features/helpers';
 
 export function useBusyGuard() {
   const [busy, setBusy] = useState(false);

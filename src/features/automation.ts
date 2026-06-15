@@ -1,13 +1,14 @@
-// The automation block: not a sticky note by convention — a white disc with
+// The automation block: not a sticky card by convention — a white disc with
 // purple double gears, plus an editable title above it (grouped) so
-// automations can be named.
+// automations can be named. The gear is an inline SVG image so the graphic
+// scales with the element when it is resized.
 
-import { META_KEY, addTitleAbove, settleAtAbsolute } from '../miro/helpers';
+import type { CanvasElement } from '../ports/canvas';
+import { services } from '../services';
+import { addTitleAbove } from './helpers';
 
 export const GEAR_SIZE = 120;
 
-// An inline SVG image: unlike a shape with a text glyph, the graphic scales
-// with the item when it is resized.
 function gearMarkup(toothOffsetDeg: number): string {
   const teeth = [0, 45, 90, 135, 180, 225, 270, 315]
     .map(
@@ -20,15 +21,11 @@ function gearMarkup(toothOffsetDeg: number): string {
 const GEAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#ffffff" stroke="#7f77dd" stroke-width="3"/><g transform="translate(38 60) scale(0.58) translate(-50 -50)">${gearMarkup(0)}</g><g transform="translate(67 33) scale(0.4) translate(-50 -50)">${gearMarkup(22)}</g></svg>`;
 const GEAR_ICON_URL = `data:image/svg+xml;base64,${btoa(GEAR_SVG)}`;
 
-export async function createAutomation(x: number, y: number) {
-  const gear = await miro.board.createImage({
-    url: GEAR_ICON_URL,
-    x,
-    y,
-    width: GEAR_SIZE,
-  });
-  await gear.setMetadata(META_KEY, { type: 'automation' });
-  await settleAtAbsolute(gear.id, x, y);
+export async function createAutomation(x: number, y: number): Promise<CanvasElement> {
+  const { canvas } = services();
+  const gear = await canvas.createImage({ url: GEAR_ICON_URL, x, y, width: GEAR_SIZE });
+  await canvas.setMeta(gear.id, { type: 'automation' });
+  await canvas.settle(gear.id, x, y);
   await addTitleAbove('Automation', gear, x, y);
   return gear;
 }

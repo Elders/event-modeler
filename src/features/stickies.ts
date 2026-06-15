@@ -1,29 +1,26 @@
-// Sticky-note blocks: events, commands, read models, external events, errors.
-// They map 1:1 onto Miro's native sticky palette (see blocks.ts).
+// Sticky-card blocks: events, commands, read models, external events, errors.
+// They map onto the conventional event-modeling palette (see domain/vocabulary).
 
-import { STICKY_COLORS, type StickyBlockType } from '../blocks';
-import { META_KEY, settleAtAbsolute } from '../miro/helpers';
+import { STICKY_COLORS, STICKY_LABEL, type StickyBlockType } from '../domain/vocabulary';
+import type { CanvasElement } from '../ports/canvas';
+import { services } from '../services';
 
 export const STICKY_WIDTH = 200;
 
-const STICKY_LABEL: Record<StickyBlockType, string> = {
-  event: 'Event',
-  command: 'Command',
-  readModel: 'Read model',
-  externalEvent: 'External event',
-  error: 'Error',
-};
-
-export async function createSticky(type: StickyBlockType, x: number, y: number) {
-  const sticky = await miro.board.createStickyNote({
+export async function createSticky(
+  type: StickyBlockType,
+  x: number,
+  y: number,
+): Promise<CanvasElement> {
+  const { canvas } = services();
+  const card = await canvas.createCard({
     x,
     y,
-    shape: 'square',
     width: STICKY_WIDTH,
     content: STICKY_LABEL[type],
-    style: { fillColor: STICKY_COLORS[type] },
+    color: STICKY_COLORS[type],
   });
-  await sticky.setMetadata(META_KEY, { type });
-  await settleAtAbsolute(sticky.id, x, y);
-  return sticky;
+  await canvas.setMeta(card.id, { type });
+  await canvas.settle(card.id, x, y);
+  return card;
 }
