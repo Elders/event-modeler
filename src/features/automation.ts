@@ -21,11 +21,15 @@ function gearMarkup(toothOffsetDeg: number): string {
 const GEAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="#ffffff" stroke="#7f77dd" stroke-width="3"/><g transform="translate(38 60) scale(0.58) translate(-50 -50)">${gearMarkup(0)}</g><g transform="translate(67 33) scale(0.4) translate(-50 -50)">${gearMarkup(22)}</g></svg>`;
 const GEAR_ICON_URL = `data:image/svg+xml;base64,${btoa(GEAR_SVG)}`;
 
-export async function createAutomation(x: number, y: number): Promise<CanvasElement> {
+export async function createAutomation(
+  x: number,
+  y: number,
+  title = 'Automation',
+): Promise<CanvasElement> {
   const { canvas } = services();
   const gear = await canvas.createImage({ url: GEAR_ICON_URL, x, y, width: GEAR_SIZE });
   await canvas.setMeta(gear.id, { type: 'automation' });
   await canvas.settle(gear.id, x, y);
-  await addTitleAbove('Automation', gear, x, y);
+  await addTitleAbove(title, gear, x, y);
   return gear;
 }

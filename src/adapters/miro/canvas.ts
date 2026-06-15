@@ -47,6 +47,29 @@ type WriteView = {
   sync(): Promise<unknown>;
 };
 
+// Miro rate-limits writes (HTTP 429). A single user action never approaches the
+// limit, but a bulk operation (generating a whole model) can — so every write
+// goes through this backoff. Reads are left alone; the limit bites on creates.
+function isRateLimited(error: unknown): boolean {
+  const status = (error as { status?: number } | null)?.status;
+  if (status === 429) return true;
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return message.includes('429') || message.includes('too many requests') || message.includes('rate limit');
+}
+
+const RETRY_DELAYS_MS = [500, 1000, 2000, 4000];
+
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt >= RETRY_DELAYS_MS.length || !isRateLimited(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
 function kindOf(type: string): ElementKind {
   switch (type) {
     case 'sticky_note':
@@ -109,22 +132,26 @@ export class MiroCanvas implements Canvas {
   async createCard(spec: CardSpec): Promise<CanvasElement> {
     type Arg = Parameters<typeof miro.board.createStickyNote>[0];
     const sticky = this.cache(
-      await miro.board.createStickyNote({
-        x: spec.x,
-        y: spec.y,
-        shape: 'square',
-        width: spec.width,
-        content: spec.content,
-        style: { fillColor: spec.color },
-        ...(spec.link ? { linkedTo: spec.link } : {}),
-      } as Arg),
+      await withRetry(() =>
+        miro.board.createStickyNote({
+          x: spec.x,
+          y: spec.y,
+          shape: 'square',
+          width: spec.width,
+          content: spec.content,
+          style: { fillColor: spec.color },
+          ...(spec.link ? { linkedTo: spec.link } : {}),
+        } as Arg),
+      ),
     );
     return this.snap(sticky);
   }
 
   async createImage(spec: ImageSpec): Promise<CanvasElement> {
     const image = this.cache(
-      await miro.board.createImage({ url: spec.url, x: spec.x, y: spec.y, width: spec.width }),
+      await withRetry(() =>
+        miro.board.createImage({ url: spec.url, x: spec.x, y: spec.y, width: spec.width }),
+      ),
     );
     return this.snap(image);
   }
@@ -132,17 +159,19 @@ export class MiroCanvas implements Canvas {
   async createText(spec: TextSpec): Promise<CanvasElement> {
     type Arg = Parameters<typeof miro.board.createText>[0];
     const text = this.cache(
-      await miro.board.createText({
-        content: spec.content,
-        x: spec.x,
-        y: spec.y,
-        width: spec.width,
-        style: {
-          color: spec.color ?? '#9c9cac',
-          fontSize: spec.fontSize ?? 14,
-          textAlign: spec.align ?? 'left',
-        },
-      } as Arg),
+      await withRetry(() =>
+        miro.board.createText({
+          content: spec.content,
+          x: spec.x,
+          y: spec.y,
+          width: spec.width,
+          style: {
+            color: spec.color ?? '#9c9cac',
+            fontSize: spec.fontSize ?? 14,
+            textAlign: spec.align ?? 'left',
+          },
+        } as Arg),
+      ),
     );
     return this.snap(text);
   }
@@ -152,14 +181,16 @@ export class MiroCanvas implements Canvas {
     // The live SDK requires `style.fillColor` (the published typings mark it
     // optional) and rejects a `content` property outright.
     const frame = this.cache(
-      await miro.board.createFrame({
-        title: spec.title,
-        x: spec.x,
-        y: spec.y,
-        width: spec.width,
-        height: spec.height,
-        style: { fillColor: spec.fill },
-      } as Arg),
+      await withRetry(() =>
+        miro.board.createFrame({
+          title: spec.title,
+          x: spec.x,
+          y: spec.y,
+          width: spec.width,
+          height: spec.height,
+          style: { fillColor: spec.fill },
+        } as Arg),
+      ),
     );
     return this.snap(frame);
   }
@@ -167,24 +198,26 @@ export class MiroCanvas implements Canvas {
   async createShape(spec: ShapeSpec): Promise<CanvasElement> {
     type Arg = Parameters<typeof miro.board.createShape>[0];
     const shape = this.cache(
-      await miro.board.createShape({
-        shape: spec.shape,
-        x: spec.x,
-        y: spec.y,
-        width: spec.width,
-        height: spec.height,
-        content: spec.content ?? '',
-        style: {
-          fillColor: spec.fill,
-          fillOpacity: spec.fillOpacity,
-          borderColor: spec.borderColor,
-          borderWidth: spec.borderWidth,
-          color: spec.textColor,
-          fontSize: spec.fontSize,
-          textAlign: spec.textAlign,
-          textAlignVertical: spec.textAlignVertical,
-        },
-      } as Arg),
+      await withRetry(() =>
+        miro.board.createShape({
+          shape: spec.shape,
+          x: spec.x,
+          y: spec.y,
+          width: spec.width,
+          height: spec.height,
+          content: spec.content ?? '',
+          style: {
+            fillColor: spec.fill,
+            fillOpacity: spec.fillOpacity,
+            borderColor: spec.borderColor,
+            borderWidth: spec.borderWidth,
+            color: spec.textColor,
+            fontSize: spec.fontSize,
+            textAlign: spec.textAlign,
+            textAlignVertical: spec.textAlignVertical,
+          },
+        } as Arg),
+      ),
     );
     return this.snap(shape);
   }
@@ -192,7 +225,9 @@ export class MiroCanvas implements Canvas {
   async createLink(fromId: string, toId: string): Promise<void> {
     // No shape or style overrides: stamped links use the SDK defaults, so they
     // are indistinguishable from manually drawn ones.
-    await miro.board.createConnector({ start: { item: fromId }, end: { item: toId } });
+    await withRetry(() =>
+      miro.board.createConnector({ start: { item: fromId }, end: { item: toId } }),
+    );
   }
 
   async get(ids: string[]): Promise<CanvasElement[]> {
@@ -235,7 +270,7 @@ export class MiroCanvas implements Canvas {
       if (patch.height !== undefined && 'height' in item) w.height = patch.height;
       if (patch.content !== undefined && 'content' in item) w.content = patch.content;
       if (patch.color !== undefined && w.style) w.style.fillColor = patch.color;
-      syncs.push(w.sync());
+      syncs.push(withRetry(() => w.sync()));
     }
     await Promise.all(syncs);
   }
@@ -253,11 +288,11 @@ export class MiroCanvas implements Canvas {
     const child = this.items.get(childId);
     if (!frame?.add || !child) return;
     try {
-      await frame.add(child);
+      await withRetry(() => frame.add!(child));
       const w = child as unknown as WriteView;
       w.x = relX;
       w.y = relY;
-      await w.sync();
+      await withRetry(() => w.sync());
     } catch (error) {
       // Re-parenting can fail; the child keeps the absolute position it was
       // created at, so the layout is still right.
@@ -296,7 +331,7 @@ export class MiroCanvas implements Canvas {
       | { setMetadata?: (key: string, value: unknown) => Promise<unknown> }
       | undefined;
     if (!item?.setMetadata) return;
-    await item.setMetadata(META_KEY, meta);
+    await withRetry(() => item.setMetadata!(META_KEY, meta));
   }
 
   async getMeta(id: string): Promise<ElementMeta | null> {
@@ -327,7 +362,7 @@ export class MiroCanvas implements Canvas {
       const w = fresh as unknown as WriteView;
       w.x = absX - ((p.x ?? 0) - (p.width ?? 0) / 2);
       w.y = absY - ((p.y ?? 0) - (p.height ?? 0) / 2);
-      await w.sync();
+      await withRetry(() => w.sync());
     } catch (error) {
       console.warn('Could not settle a created element into its frame', error);
     }

@@ -3,6 +3,12 @@
 A [Miro](https://miro.com) app for [event modeling](https://eventmodeling.org), built on the
 **Web SDK v2** with **React + TypeScript**. The toolbar icon opens a panel with:
 
+- **Generate from text** — paste a description of a system or workflow and an AI
+  agent (Claude) drafts a whole model: typed blocks laid out in the three lanes,
+  connectors, grouped into slices, with Given/When/Then specifications. Enter
+  your own Anthropic API key in the section's **Settings** (stored only in this
+  browser's `localStorage`, never on the board) and pick a model. Everything it
+  places is a normal, editable Miro widget — rearrange or delete as you like.
 - **Building blocks** — drag (or click) to place: **Event** (orange sticky),
   **Command** (blue sticky), **Read model** (yellow-green sticky),
   **External event** (yellow sticky), **Automation** (a double-gear icon image

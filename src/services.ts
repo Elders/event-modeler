@@ -8,6 +8,7 @@
 
 import type { Canvas } from './ports/canvas';
 import type { Notifier } from './ports/notifier';
+import type { Planner } from './ports/planner';
 import type { Runtime } from './ports/runtime';
 import type { Store } from './ports/store';
 import type { Viewport } from './ports/viewport';
@@ -18,6 +19,9 @@ export interface Services {
   notifier: Notifier;
   viewport: Viewport;
   runtime: Runtime;
+  // Optional: only the panel page wires a Planner. The always-on board script
+  // has no use for it, so it stays free of the AI adapter (and its bundle).
+  planner?: Planner;
 }
 
 let current: Services | null = null;

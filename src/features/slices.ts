@@ -21,24 +21,36 @@ export async function readSliceRecords(): Promise<FrameRecord[]> {
   return readRecords(SLICES_KEY);
 }
 
-export async function createSlice(x: number, y: number): Promise<CanvasElement> {
+export interface SliceOptions {
+  width?: number;
+  height?: number;
+  title?: string;
+}
+
+export async function createSlice(
+  x: number,
+  y: number,
+  opts: SliceOptions = {},
+): Promise<CanvasElement> {
   const { canvas, store } = services();
+  const width = opts.width ?? SLICE_WIDTH;
+  const height = opts.height ?? SLICE_HEIGHT;
   const frame = await canvas.createContainer({
-    title: 'Slice',
+    title: opts.title ?? 'Slice',
     x,
     y,
-    width: SLICE_WIDTH,
-    height: SLICE_HEIGHT,
+    width,
+    height,
     fill: 'transparent',
   });
   // On-canvas "add specification" button at the slice's bottom-center —
   // selecting it stacks a new spec beneath this slice.
   try {
-    const offset = sliceButtonOffset(SLICE_WIDTH, SLICE_HEIGHT);
+    const offset = sliceButtonOffset(width, height);
     const button = await canvas.createImage({
       url: PLUS_ICON_URL,
       x,
-      y: y + SLICE_HEIGHT / 2 - SLICE_BUTTON_INSET,
+      y: y + height / 2 - SLICE_BUTTON_INSET,
       width: SPEC_ADD_SIZE,
     });
     await canvas.setMeta(button.id, { type: 'slice-add-spec', slice: frame.id });
@@ -46,7 +58,7 @@ export async function createSlice(x: number, y: number): Promise<CanvasElement> 
     const records = await readSliceRecords();
     await store.write(SLICES_KEY, [
       ...records,
-      { frame: frame.id, labels: [button.id], width: SLICE_WIDTH, height: SLICE_HEIGHT },
+      { frame: frame.id, labels: [button.id], width, height },
     ]);
   } catch (error) {
     console.warn('Could not attach the add-spec button to the slice', error);

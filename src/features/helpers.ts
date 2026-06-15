@@ -5,7 +5,17 @@
 import { normalizeRecords, type FrameRecord } from '../domain/records';
 import { centerOf, expansionToInclude, type Box } from '../domain/viewport';
 import type { CanvasElement } from '../ports/canvas';
+import type { Planner } from '../ports/planner';
 import { services } from '../services';
+
+// The Planner is wired only on the panel page; features that need it (model
+// generation, its settings) get it through here, with a clear error on the
+// board script where it is intentionally absent.
+export function requirePlanner(): Planner {
+  const { planner } = services();
+  if (!planner) throw new Error('The model generator is only available from the panel.');
+  return planner;
+}
 
 export async function viewportCenter(): Promise<{ x: number; y: number }> {
   return centerOf(await services().viewport.get());

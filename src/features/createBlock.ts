@@ -12,12 +12,13 @@ export async function createBlock(
   type: BlockType,
   x: number,
   y: number,
+  label?: string,
 ): Promise<CanvasElement> {
-  if (type === 'automation') return createAutomation(x, y);
-  if (type === 'screen') return createSketchScreen(x, y);
+  if (type === 'automation') return createAutomation(x, y, label);
+  if (type === 'screen') return createSketchScreen(x, y, label);
   if (type === 'slice') return createSlice(x, y);
   // The three branches above narrow `type` to the sticky-card types here.
-  return createSticky(type, x, y);
+  return createSticky(type, x, y, label);
 }
 
 export async function createBlockAtCenter(type: BlockType): Promise<CanvasElement> {

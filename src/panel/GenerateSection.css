@@ -1,0 +1,55 @@
+/* The "Generate from text" section: a prose textarea, the generate button, and
+   a collapsible settings block for the API key and model picker. */
+
+.generate-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--em-ink);
+  resize: vertical;
+}
+
+.generate-input:focus {
+  outline: none;
+  border-color: #4262ff;
+}
+
+.generate-settings {
+  margin-top: 10px;
+}
+
+.generate-settings summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--em-muted);
+  user-select: none;
+}
+
+.generate-label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 11px;
+  color: var(--em-muted);
+}
+
+.generate-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--em-ink);
+  background: #fff;
+}
+
+.generate-field:focus {
+  outline: none;
+  border-color: #4262ff;
+}

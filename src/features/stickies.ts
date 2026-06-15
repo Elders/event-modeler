@@ -11,13 +11,14 @@ export async function createSticky(
   type: StickyBlockType,
   x: number,
   y: number,
+  label?: string,
 ): Promise<CanvasElement> {
   const { canvas } = services();
   const card = await canvas.createCard({
     x,
     y,
     width: STICKY_WIDTH,
-    content: STICKY_LABEL[type],
+    content: label ?? STICKY_LABEL[type],
     color: STICKY_COLORS[type],
   });
   await canvas.setMeta(card.id, { type });
