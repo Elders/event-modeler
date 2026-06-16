@@ -8,7 +8,13 @@ import { connect } from './connectors';
 import { createBlock } from './createBlock';
 import { ensureVisible, viewportCenter } from './helpers';
 
-export type PatternId = 'command' | 'view' | 'automation' | 'translation' | 'processor';
+export type PatternId =
+  | 'command'
+  | 'view'
+  | 'automation'
+  | 'translation'
+  | 'processor'
+  | 'reservation';
 
 interface StampNode {
   block: BlockType;
@@ -87,6 +93,26 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
       [3, 4],
       [4, 5],
       [5, 2],
+    ],
+  },
+  // Reservation: a tentative claim that is later confirmed. A command reserves a
+  // limited resource (Reserved event), which updates an availability read model;
+  // an automation reads it and issues a command to confirm (Confirmed event).
+  reservation: {
+    nodes: [
+      { block: 'command', col: 0, lane: 0 },
+      { block: 'event', col: 0, lane: 1 },
+      { block: 'readModel', col: 1, lane: 0 },
+      { block: 'automation', col: 2, lane: 0 },
+      { block: 'command', col: 3, lane: 0 },
+      { block: 'event', col: 3, lane: 1 },
+    ],
+    links: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
     ],
   },
 };

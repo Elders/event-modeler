@@ -15,6 +15,11 @@ const PATTERN_ROWS: { id: PatternId; name: string; dots: DotKind[] }[] = [
     name: 'Processor todo-list',
     dots: ['command', 'event', 'readModel', 'gear', 'command', 'event'],
   },
+  {
+    id: 'reservation',
+    name: 'Reservation',
+    dots: ['command', 'event', 'readModel', 'gear', 'command', 'event'],
+  },
 ];
 
 export function PatternsSection({ busy, guard }: { busy: boolean; guard: Guard }) {
