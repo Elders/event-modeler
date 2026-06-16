@@ -105,7 +105,7 @@ The block types and their meaning:
 - automation: reacts to state and issues commands (no user involved).
 - screen: a UI surface.
 
-A slice is one atomic feature — usually a single step of the flow: a screen (top) → command (middle) → event (bottom), or an event (bottom) → read model (middle) → screen (top). Break the description into a sequence of slices ordered along the timeline. Most slices are one column; give a block a higher "column" only when a slice genuinely has multiple steps.
+A slice is one atomic feature — usually a single step of the flow: a screen (top) → command (middle) → event (bottom), or an event (bottom) → read model (middle) → screen (top). Each slice contains exactly one command or one read model — that single middle block is the spine of the slice; when the flow reaches another command or read model, start a new slice. Break the description into a sequence of slices ordered along the timeline. Most slices are one column; give a block a higher "column" only when a slice genuinely has multiple steps.
 
 Guidance:
 - Give every slice and block a short, unique "ref" (e.g. "place-order", "order-placed-evt"). Links and specs reference blocks by these refs.
