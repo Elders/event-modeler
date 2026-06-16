@@ -8,7 +8,7 @@ import { connect } from './connectors';
 import { createBlock } from './createBlock';
 import { ensureVisible, viewportCenter } from './helpers';
 
-export type PatternId = 'command' | 'view' | 'automation' | 'translation';
+export type PatternId = 'command' | 'view' | 'automation' | 'translation' | 'processor';
 
 interface StampNode {
   block: BlockType;
@@ -66,6 +66,27 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
       [0, 1],
       [1, 2],
       [2, 3],
+    ],
+  },
+  // Processor TODO-list: a command produces a fact that adds work to a read
+  // model acting as the processor's TODO list; the processor (automation) reads
+  // it, issues a command, and the resulting event marks the item done.
+  processor: {
+    nodes: [
+      { block: 'command', col: 0, lane: 0 },
+      { block: 'event', col: 0, lane: 1 },
+      { block: 'readModel', col: 1, lane: 0 },
+      { block: 'automation', col: 2, lane: 0 },
+      { block: 'command', col: 3, lane: 0 },
+      { block: 'event', col: 3, lane: 1 },
+    ],
+    links: [
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+      [4, 5],
+      [5, 2],
     ],
   },
 };
