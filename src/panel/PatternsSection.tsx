@@ -6,17 +6,17 @@ import { Dot, type DotKind } from './Dot';
 import type { Guard } from './useBusyGuard';
 
 const PATTERN_ROWS: { id: PatternId; name: string; dots: DotKind[] }[] = [
-  { id: 'command', name: 'Command slice', dots: ['sketch', 'command', 'event'] },
-  { id: 'view', name: 'View slice', dots: ['event', 'readModel', 'sketch'] },
-  { id: 'automation', name: 'Automation slice', dots: ['readModel', 'gear', 'command', 'event'] },
-  { id: 'translation', name: 'Translation slice', dots: ['externalEvent', 'gear', 'event'] },
+  { id: 'command', name: 'State change', dots: ['sketch', 'command', 'event'] },
+  { id: 'view', name: 'State view', dots: ['event', 'readModel', 'sketch'] },
+  { id: 'automation', name: 'Automation', dots: ['readModel', 'gear', 'command', 'event'] },
+  { id: 'translation', name: 'Translation', dots: ['externalEvent', 'gear', 'command', 'event'] },
 ];
 
 export function PatternsSection({ busy, guard }: { busy: boolean; guard: Guard }) {
   return (
     <section className="section">
       <h2 className="section-title">Pattern stamps</h2>
-      <p className="section-sub">Insert a ready-made, pre-linked slice</p>
+      <p className="section-sub">Insert a ready-made, pre-linked pattern</p>
       {PATTERN_ROWS.map((row) => (
         <button
           key={row.id}

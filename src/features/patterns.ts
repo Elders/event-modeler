@@ -59,11 +59,13 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
     nodes: [
       { block: 'externalEvent', col: 0, lane: 1 },
       { block: 'automation', col: 1, lane: 0 },
+      { block: 'command', col: 2, lane: 0 },
       { block: 'event', col: 2, lane: 1 },
     ],
     links: [
       [0, 1],
       [1, 2],
+      [2, 3],
     ],
   },
 };
