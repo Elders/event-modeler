@@ -25,6 +25,11 @@ const PATTERN_ROWS: { id: PatternId; name: string; dots: DotKind[] }[] = [
     name: 'Lookup table',
     dots: ['sketch', 'readModel', 'event', 'readModel', 'event'],
   },
+  {
+    id: 'projection',
+    name: 'Projected read model',
+    dots: ['command', 'event', 'readModel'],
+  },
 ];
 
 export function PatternsSection({ busy, guard }: { busy: boolean; guard: Guard }) {

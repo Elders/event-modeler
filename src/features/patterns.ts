@@ -15,7 +15,8 @@ export type PatternId =
   | 'translation'
   | 'processor'
   | 'reservation'
-  | 'lookup';
+  | 'lookup'
+  | 'projection';
 
 interface StampNode {
   block: BlockType;
@@ -131,6 +132,19 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
       [4, 2],
       [1, 0],
       [2, 0],
+    ],
+  },
+  // Projected read model: a command produces an event, which is projected into
+  // a read model.
+  projection: {
+    nodes: [
+      { block: 'command', col: 0, lane: 0 },
+      { block: 'event', col: 0, lane: 1 },
+      { block: 'readModel', col: 1, lane: 0 },
+    ],
+    links: [
+      [0, 1],
+      [1, 2],
     ],
   },
 };
