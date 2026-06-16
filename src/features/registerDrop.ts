@@ -3,19 +3,19 @@
 // duplicate firings, not intent (the host can double-fire).
 
 import { services } from '../services';
-import { createBlock } from './createBlock';
+import { placePaletteItem } from './createBlock';
 import { reportError } from './helpers';
 
 let lastDrop = { key: '', time: 0 };
 
 export function registerDrop(): void {
-  services().runtime.onDrop(async ({ x, y, blockType }) => {
-    const key = `${blockType}:${Math.round(x)}:${Math.round(y)}`;
+  services().runtime.onDrop(async ({ x, y, kind }) => {
+    const key = `${kind}:${Math.round(x)}:${Math.round(y)}`;
     const now = Date.now();
     if (key === lastDrop.key && now - lastDrop.time < 500) return;
     lastDrop = { key, time: now };
     try {
-      await createBlock(blockType, x, y);
+      await placePaletteItem(kind, x, y);
     } catch (error) {
       await reportError(error);
     }

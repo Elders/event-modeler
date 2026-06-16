@@ -3,7 +3,7 @@
 // cannot stack listeners — `ui.off` is unreliable — and a handler indirection
 // keeps the active logic fresh across hot reloads.
 
-import type { BlockType } from '../../domain/vocabulary';
+import type { PaletteKind } from '../../domain/vocabulary';
 import type { ElementKind } from '../../ports/canvas';
 import type { DropInfo, Runtime, SelectionItem } from '../../ports/runtime';
 
@@ -54,9 +54,9 @@ export class MiroRuntime implements Runtime {
 
   onDrop(handler: (drop: DropInfo) => void): void {
     window.__emDropHandler = (event) => {
-      const blockType = event.target.getAttribute('data-block') as BlockType | null;
-      if (!blockType) return;
-      handler({ x: event.x, y: event.y, blockType });
+      const kind = event.target.getAttribute('data-block') as PaletteKind | null;
+      if (!kind) return;
+      handler({ x: event.x, y: event.y, kind });
     };
     if (!window.__emDropRegistered) {
       window.__emDropRegistered = true;

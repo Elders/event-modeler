@@ -7,9 +7,6 @@ import { BuildingBlocksSection } from './BuildingBlocksSection';
 import { GenerateSection } from './GenerateSection';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
 import { PatternsSection } from './PatternsSection';
-import { ScreensSection } from './ScreensSection';
-import { SpecificationsSection } from './SpecificationsSection';
-import { SwimlanesSection } from './SwimlanesSection';
 import { useBusyGuard } from './useBusyGuard';
 
 export function Panel() {
@@ -23,10 +20,7 @@ export function Panel() {
         {tab === 'build' ? (
           <>
             <BuildingBlocksSection guard={guard} />
-            <ScreensSection busy={busy} guard={guard} />
             <PatternsSection busy={busy} guard={guard} />
-            <SpecificationsSection busy={busy} guard={guard} />
-            <SwimlanesSection busy={busy} guard={guard} />
           </>
         ) : (
           <GenerateSection busy={busy} guard={guard} />

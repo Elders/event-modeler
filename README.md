@@ -19,15 +19,15 @@ into two tabs — **Build** (the manual modeling palette) and **Generate** (AI):
   placed inside move with it; rename it via its title; the **+** button at its
   bottom edge adds a specification beneath it). Screens are deliberately not
   frames — connectors can't attach to frames, and screens must be linkable
-  into flows.
-- **Screens** — upload a screen capture (placed as image + title, grouped), or
-  drop a blank sketch screen (a white placeholder image) and draw over it with
-  the pen tool. To paste a screenshot, click the board first (so the canvas has
-  focus), then press Ctrl+V. Arrows attach to the image, not the title.
+  into flows. The palette also includes two tool tiles — **Specification**
+  (a Given/When/Then frame, below) and **Swimlanes** (three transparent lane
+  guides: Screens / Commands & read models / Events) — drag or click them like
+  any block. To paste a screenshot onto a sketch screen, click the board first
+  (so the canvas has focus), then Ctrl+V.
 - **Pattern stamps** — one-click pre-linked slices for the four event-modeling
   patterns: command, view, automation, translation. Further linking is done
   manually with Miro's own connector tool.
-- **Specifications** — a Given/When/Then frame (labels only, so dragging
+- **Specification** *(Build tab tile)* — a Given/When/Then frame (labels only, so dragging
   anywhere moves the whole spec). Select a slice first and the spec stacks
   beneath it — below any specs already there — titled after the slice;
   otherwise it is standalone. Each zone has a **+** button on the board: click
@@ -40,8 +40,6 @@ into two tabs — **Build** (the manual modeling palette) and **Generate** (AI):
   copy, and clicking it jumps to the source. The red **Error** sticky
   expresses a failing Then. Resizing a spec re-grids its copies to the new
   width automatically (detected by the same poll, once the width settles).
-- **Insert swimlanes** — three transparent lane guides
-  (Screens / Commands & read models / Events).
 
 Everything the app creates is a native Miro widget (sticky notes use Miro's own
 color palette) tagged with app metadata (`em: { type }`) for future tooling.

@@ -8,9 +8,9 @@ import { ensureVisible, viewportCenter } from './helpers';
 
 const LANES = ['Screens', 'Commands & read models', 'Events'];
 
-export async function insertSwimlanes(): Promise<void> {
+export async function insertSwimlanes(at?: { x: number; y: number }): Promise<void> {
   const { canvas } = services();
-  const { x: cx, y: cy } = await viewportCenter();
+  const { x: cx, y: cy } = at ?? (await viewportCenter());
   const width = 2400;
   const height = 500;
   const lanes: CanvasElement[] = [];

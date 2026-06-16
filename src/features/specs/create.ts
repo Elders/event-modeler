@@ -28,7 +28,10 @@ export async function addSpecification(): Promise<CanvasElement> {
   return createSpecification(slice);
 }
 
-export async function createSpecification(slice: CanvasElement | null): Promise<CanvasElement> {
+export async function createSpecification(
+  slice: CanvasElement | null,
+  at?: { x: number; y: number },
+): Promise<CanvasElement> {
   const { canvas, store } = services();
   const height = specFrameHeight(DEFAULT_ZONE_HEIGHTS);
   let x: number;
@@ -49,7 +52,7 @@ export async function createSpecification(slice: CanvasElement | null): Promise<
     y = bottom + SPEC_STACK_GAP + height / 2;
     title = `${slice.title ?? 'Slice'}: specification`;
   } else {
-    const center = await viewportCenter();
+    const center = at ?? (await viewportCenter());
     x = center.x;
     y = center.y;
   }

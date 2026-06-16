@@ -2,14 +2,14 @@
 // guards each registration so repeated module evaluation (HMR, StrictMode)
 // cannot stack listeners; a standalone host wires its own equivalents.
 
-import type { BlockType } from '../domain/vocabulary';
+import type { PaletteKind } from '../domain/vocabulary';
 import type { ElementKind } from './canvas';
 
 // The minimal element identity a selection event carries.
 export type SelectionItem = { id: string; kind: ElementKind };
 
 // A palette tile dropped onto the canvas at an absolute point.
-export type DropInfo = { x: number; y: number; blockType: BlockType };
+export type DropInfo = { x: number; y: number; kind: PaletteKind };
 
 export interface Runtime {
   onSelectionChange(handler: (items: SelectionItem[]) => void): void;

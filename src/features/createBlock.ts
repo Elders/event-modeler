@@ -1,12 +1,16 @@
-// Dispatcher: maps a block type from the palette to its feature use-case.
+// Dispatcher: maps a palette item to its feature use-case. Typed blocks go to
+// their block creators; the two tool tiles (specification, swimlanes) go to
+// their own features, placed at the drop point.
 
-import type { BlockType } from '../domain/vocabulary';
+import type { BlockType, PaletteKind } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
 import { createAutomation } from './automation';
 import { viewportCenter } from './helpers';
 import { createSketchScreen } from './screens';
 import { createSlice } from './slices';
+import { createSpecification } from './specs/create';
 import { createSticky } from './stickies';
+import { insertSwimlanes } from './swimlanes';
 
 export async function createBlock(
   type: BlockType,
@@ -24,4 +28,19 @@ export async function createBlock(
 export async function createBlockAtCenter(type: BlockType): Promise<CanvasElement> {
   const { x, y } = await viewportCenter();
   return createBlock(type, x, y);
+}
+
+// Places any palette item at an absolute point (used by the drop handler).
+// Dragged specifications and swimlanes land at the drop point; a dragged spec
+// is standalone (the slice-attaching behavior stays on the click/“+” paths).
+export async function placePaletteItem(kind: PaletteKind, x: number, y: number): Promise<void> {
+  if (kind === 'specification') {
+    await createSpecification(null, { x, y });
+    return;
+  }
+  if (kind === 'swimlanes') {
+    await insertSwimlanes({ x, y });
+    return;
+  }
+  await createBlock(kind, x, y);
 }

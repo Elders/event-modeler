@@ -1,10 +1,9 @@
 // Screens: an editable title above a content image, grouped so they move as
-// one. Two creation paths — a blank sketch placeholder to draw over, or an
-// uploaded capture.
+// one. A blank sketch placeholder to draw over, placed from the Screen block.
 
 import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
-import { addTitleAbove, viewportCenter } from './helpers';
+import { addTitleAbove } from './helpers';
 
 export const SCREEN_WIDTH = 420;
 export const SCREEN_HEIGHT = 320;
@@ -24,15 +23,5 @@ export async function createSketchScreen(
   await canvas.setMeta(image.id, { type: 'screen' });
   await canvas.settle(image.id, x, y);
   await addTitleAbove(title, image, x, y);
-  return image;
-}
-
-export async function placeScreenImage(dataUrl: string, name = 'Screen'): Promise<CanvasElement> {
-  const { canvas } = services();
-  const { x, y } = await viewportCenter();
-  const image = await canvas.createImage({ url: dataUrl, x, y, width: 600 });
-  await canvas.setMeta(image.id, { type: 'screen' });
-  await canvas.settle(image.id, x, y);
-  await addTitleAbove(name, image, x, y);
   return image;
 }

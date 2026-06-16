@@ -20,6 +20,12 @@ export type StickyBlockType = Extract<
   'event' | 'command' | 'readModel' | 'externalEvent' | 'error'
 >;
 
+// Everything the palette can place by drag or click: the typed blocks plus the
+// two tool structures. Specifications and swimlanes are deliberately NOT
+// BlockType — they aren't event-modeling blocks — but they share the palette's
+// drag/drop and click-to-place pipeline.
+export type PaletteKind = BlockType | 'specification' | 'swimlanes';
+
 // The conventional event-modeling colors. Adapters translate these to native
 // canvas colors (e.g. Miro's fixed sticky palette).
 export type CardColor = 'orange' | 'blue' | 'light_green' | 'yellow' | 'red';
