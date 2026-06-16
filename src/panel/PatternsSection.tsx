@@ -20,6 +20,11 @@ const PATTERN_ROWS: { id: PatternId; name: string; dots: DotKind[] }[] = [
     name: 'Reservation',
     dots: ['command', 'event', 'readModel', 'gear', 'command', 'event'],
   },
+  {
+    id: 'lookup',
+    name: 'Lookup table',
+    dots: ['sketch', 'readModel', 'event', 'readModel', 'event'],
+  },
 ];
 
 export function PatternsSection({ busy, guard }: { busy: boolean; guard: Guard }) {

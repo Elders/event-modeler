@@ -14,7 +14,8 @@ export type PatternId =
   | 'automation'
   | 'translation'
   | 'processor'
-  | 'reservation';
+  | 'reservation'
+  | 'lookup';
 
 interface StampNode {
   block: BlockType;
@@ -113,6 +114,23 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
       [2, 3],
       [3, 4],
       [4, 5],
+    ],
+  },
+  // Lookup table: a screen backed by one or more read models, each hydrated by
+  // its own event. Stamped with two read models to show the "one or more" shape.
+  lookup: {
+    nodes: [
+      { block: 'screen', col: 0.5, lane: -1 },
+      { block: 'readModel', col: 0, lane: 0 },
+      { block: 'readModel', col: 1, lane: 0 },
+      { block: 'event', col: 0, lane: 1 },
+      { block: 'event', col: 1, lane: 1 },
+    ],
+    links: [
+      [3, 1],
+      [4, 2],
+      [1, 0],
+      [2, 0],
     ],
   },
 };
