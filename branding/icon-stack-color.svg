@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <title>Event modeling cards</title>
+  <!-- tile -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#050038"/>
+  <!-- stacked cards: command (blue) and read model (green) behind, event (orange) front -->
+  <rect x="12" y="12" width="72" height="72" rx="12" fill="#85a9f8" stroke="#050038" stroke-width="2.5"/>
+  <rect x="28" y="28" width="72" height="72" rx="12" fill="#cee741" stroke="#050038" stroke-width="2.5"/>
+  <rect x="44" y="44" width="72" height="72" rx="12" fill="#ffab57" stroke="#050038" stroke-width="2.5"/>
+  <!-- note lines on the front card -->
+  <g fill="#ffffff" opacity="0.55">
+    <rect x="60" y="72" width="40" height="5" rx="2.5"/>
+    <rect x="60" y="86" width="28" height="5" rx="2.5"/>
+  </g>
+</svg>
