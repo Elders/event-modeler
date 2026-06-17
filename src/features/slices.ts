@@ -44,7 +44,7 @@ export async function createSlice(
     fill: 'transparent',
   });
   // On-canvas "add specification" button at the slice's bottom-center —
-  // selecting it stacks a new spec beneath this slice.
+  // selecting it places a new spec inside this slice, growing the slice to fit.
   try {
     const offset = sliceButtonOffset(width, height);
     const button = await canvas.createImage({

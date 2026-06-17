@@ -164,7 +164,7 @@ export async function handleSpecSelection(items: SelectionItem[]): Promise<void>
       }
       const [slice] = await canvas.get([meta.slice]);
       await createSpecification(slice && slice.kind === 'container' ? slice : null);
-      await notifier.info('Specification added below the slice.');
+      await notifier.info('Specification added inside the slice.');
       return;
     }
   }

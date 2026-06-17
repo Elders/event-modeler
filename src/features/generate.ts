@@ -69,8 +69,9 @@ export async function generateModel(text: string): Promise<void> {
     }
   }
 
-  // Specs stack beneath their slice and grow as copies are added, so they are
-  // built sequentially (each reads the registry the previous one wrote).
+  // Specs are placed inside their slice (growing it) and grow as copies are
+  // added, so they are built sequentially (each reads the registry the previous
+  // one wrote, and re-reads the slice the previous spec may have grown).
   const specFrames: CanvasElement[] = [];
   for (const spec of plan.specs) {
     const sliceFrame = sliceFrames[plan.slices.findIndex((s) => s.ref === spec.slice)];
