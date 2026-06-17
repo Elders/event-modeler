@@ -4,6 +4,7 @@
 
 import type { BlockType } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
+import { services } from '../services';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
 import { ensureVisible, viewportCenter } from './helpers';
@@ -149,22 +150,73 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
   },
 };
 
-export async function stampPattern(id: PatternId): Promise<CanvasElement[]> {
-  const { x: cx, y: cy } = await viewportCenter();
-  const { nodes, links } = PATTERNS[id];
-  const cols = nodes.map((n) => n.col);
-  const midCol = (Math.min(...cols) + Math.max(...cols)) / 2;
+// The selected element's absolute center. A child of a frame reports coords
+// relative to the frame's top-left, so convert through the parent when present.
+async function absoluteCenter(el: CanvasElement): Promise<{ x: number; y: number }> {
+  if (!el.parentId) return { x: el.x, y: el.y };
+  const [parent] = await services().canvas.get([el.parentId]);
+  if (!parent || parent.kind !== 'container') return { x: el.x, y: el.y };
+  return { x: parent.x - parent.width / 2 + el.x, y: parent.y - parent.height / 2 + el.y };
+}
 
+// If the user has exactly one block of a type this pattern contains selected,
+// the stamp anchors on it: that block is reused as the matching node and the
+// rest are placed relative to it. A screen's or automation's grouped title
+// carries no block metadata, so selecting the pair still yields a single match.
+async function findStampAnchor(
+  nodes: StampNode[],
+): Promise<{ element: CanvasElement; index: number } | null> {
+  const { canvas } = services();
+  const selection = await canvas.selection();
+  const matches: { element: CanvasElement; index: number }[] = [];
+  for (const el of selection) {
+    const meta = await canvas.getMeta(el.id);
+    if (!meta) continue;
+    const index = nodes.findIndex((node) => node.block === meta.type);
+    if (index >= 0) matches.push({ element: el, index });
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export async function stampPattern(id: PatternId): Promise<CanvasElement[]> {
+  const { nodes, links } = PATTERNS[id];
+  const anchor = await findStampAnchor(nodes);
+
+  // The grid cell that maps to the origin, and the board point it sits at.
+  // Anchored: the matched node, pinned to the selected element. Otherwise: the
+  // pattern's mid-column at the view center (the original behavior).
+  let origin: { x: number; y: number };
+  let originCol: number;
+  let originLane: number;
+  if (anchor) {
+    origin = await absoluteCenter(anchor.element);
+    originCol = nodes[anchor.index].col;
+    originLane = nodes[anchor.index].lane;
+  } else {
+    origin = await viewportCenter();
+    const cols = nodes.map((n) => n.col);
+    originCol = (Math.min(...cols) + Math.max(...cols)) / 2;
+    originLane = 0;
+  }
+
+  // Reuse the selected element for the anchor node; create the rest relative to
+  // it so the pattern lays out around the user's block.
   const items: CanvasElement[] = [];
-  for (const node of nodes) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (anchor && i === anchor.index) {
+      items.push(anchor.element);
+      continue;
+    }
+    const node = nodes[i];
     items.push(
       await createBlock(
         node.block,
-        cx + (node.col - midCol) * COL_STEP,
-        cy + node.lane * LANE_STEP,
+        origin.x + (node.col - originCol) * COL_STEP,
+        origin.y + (node.lane - originLane) * LANE_STEP,
       ),
     );
   }
+
   for (const [from, to] of links) {
     try {
       await connect(items[from].id, items[to].id);
@@ -173,6 +225,14 @@ export async function stampPattern(id: PatternId): Promise<CanvasElement[]> {
       console.warn('Could not link stamped items', error);
     }
   }
-  await ensureVisible(items);
+
+  // The anchor's snapshot may carry frame-relative coords; use its absolute
+  // center so the viewport expansion covers the pattern's real footprint.
+  const boxes = items.map((item, i) =>
+    anchor && i === anchor.index
+      ? { x: origin.x, y: origin.y, width: item.width, height: item.height }
+      : item,
+  );
+  await ensureVisible(boxes);
   return items;
 }
