@@ -8,14 +8,16 @@ import {
   SLICE_BUTTON_INSET,
   SLICE_HEIGHT,
   SLICE_WIDTH,
+  sliceBoundsAround,
   sliceButtonOffset,
 } from '../domain/slice';
 import { SLICES_KEY, type FrameRecord } from '../domain/records';
 import { SPEC_ADD_SIZE } from '../domain/spec';
+import { boundingBox } from '../domain/viewport';
 import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
 import { PLUS_ICON_URL } from './assets';
-import { readRecords } from './helpers';
+import { ensureVisible, readRecords, viewportCenter } from './helpers';
 
 export async function readSliceRecords(): Promise<FrameRecord[]> {
   return readRecords(SLICES_KEY);
@@ -64,6 +66,44 @@ export async function createSlice(
     console.warn('Could not attach the add-spec button to the slice', error);
   }
   return frame;
+}
+
+// Draws a slice around the current selection, padded on all sides, and adopts
+// the selected elements so the slice's contents move with it. With nothing
+// usable selected it falls back to a default slice at the view center — so the
+// palette tile always does something sensible. Connectors and frames are
+// excluded: connectors have no footprint, and frames can't nest in a slice.
+export async function createSliceAroundSelection(): Promise<CanvasElement> {
+  const { canvas } = services();
+  const selection = await canvas.selection();
+  const framable = selection.filter(
+    (el) =>
+      el.kind !== 'connector' && el.kind !== 'container' && el.width > 0 && el.height > 0,
+  );
+
+  const box = boundingBox(framable);
+  if (!box) {
+    const { x, y } = await viewportCenter();
+    return createSlice(x, y);
+  }
+
+  const bounds = sliceBoundsAround(box);
+  const slice = await createSlice(bounds.x, bounds.y, {
+    width: bounds.width,
+    height: bounds.height,
+  });
+
+  // Re-parent each selected element, preserving its absolute position (the
+  // child coords are relative to the slice's top-left). addToContainer swallows
+  // failures, so an element that can't be adopted simply stays where it is.
+  const frameLeft = bounds.x - bounds.width / 2;
+  const frameTop = bounds.y - bounds.height / 2;
+  for (const el of framable) {
+    await canvas.addToContainer(slice.id, el.id, el.x - frameLeft, el.y - frameTop);
+  }
+
+  await ensureVisible([slice]);
+  return slice;
 }
 
 // Slice buttons care about both dimensions (bottom-center); specs only track

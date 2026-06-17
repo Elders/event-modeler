@@ -9,6 +9,24 @@ export function centerOf(viewport: Rect): { x: number; y: number } {
   return { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
 }
 
+// The tight bounding box (center-based, like every Box here) enclosing a set of
+// boxes, or null when there are none. Pure geometry, shared by callers that need
+// to wrap a selection — e.g. drawing a slice around it.
+export function boundingBox(boxes: Box[]): Box | null {
+  if (boxes.length === 0) return null;
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const box of boxes) {
+    left = Math.min(left, box.x - box.width / 2);
+    top = Math.min(top, box.y - box.height / 2);
+    right = Math.max(right, box.x + box.width / 2);
+    bottom = Math.max(bottom, box.y + box.height / 2);
+  }
+  return { x: (left + right) / 2, y: (top + bottom) / 2, width: right - left, height: bottom - top };
+}
+
 // Returns the smallest viewport that contains the current one plus every box
 // (with margin), or null when everything already fits. Never shrinks the
 // viewport, so the host never zooms in — it only ever expands to include.

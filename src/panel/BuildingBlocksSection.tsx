@@ -7,6 +7,7 @@ import './BuildingBlocksSection.css';
 import { useRef } from 'react';
 import { BLOCKS, type PaletteKind } from '../domain/vocabulary';
 import { createBlockAtCenter } from '../features/createBlock';
+import { createSliceAroundSelection } from '../features/slices';
 import { insertSwimlanes } from '../features/swimlanes';
 import { addSpecification } from '../features/specs/create';
 import { Swatch } from './Swatch';
@@ -28,7 +29,13 @@ const TILES: PaletteTile[] = [
       kind: block.type,
       label: block.label,
       hint: block.hint,
-      placeOnClick: () => createBlockAtCenter(block.type),
+      // Clicking the slice tile wraps the current selection in a padded slice
+      // (a drag still drops a default slice at the cursor); the rest place at
+      // the view center.
+      placeOnClick:
+        block.type === 'slice'
+          ? createSliceAroundSelection
+          : () => createBlockAtCenter(block.type),
     }),
   ),
   {

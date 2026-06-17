@@ -2,9 +2,24 @@
 // the model into vertical feature strips, and carries an "add specification"
 // button affixed to its bottom-center. Pure layout math — no platform here.
 
+import type { Box } from './viewport';
+
 export const SLICE_WIDTH = 700;
 export const SLICE_HEIGHT = 1500;
 export const SLICE_BUTTON_INSET = 30;
+// Breathing room left around a selection when a slice is drawn to wrap it.
+export const SLICE_PADDING = 80;
+
+// The slice bounds that enclose a bounding box with uniform padding on all
+// sides (the box is already center-based, so only the size grows).
+export function sliceBoundsAround(box: Box, padding = SLICE_PADDING): Box {
+  return {
+    x: box.x,
+    y: box.y,
+    width: box.width + padding * 2,
+    height: box.height + padding * 2,
+  };
+}
 
 // Frame-relative position of the add-spec button for a slice of the given size.
 export function sliceButtonOffset(
