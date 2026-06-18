@@ -67,7 +67,19 @@ async function upsertBox(
   if (existingId) {
     const [box] = await canvas.get([existingId]);
     if (box && box.kind === 'shape') {
-      await canvas.apply([{ id: box.id, x, y, width, height, content }]);
+      await canvas.apply([
+        {
+          id: box.id,
+          x,
+          y,
+          width,
+          height,
+          content,
+          fontSize: FIELDS_BOX_FONT,
+          textAlign: 'center',
+          textAlignVertical: 'middle',
+        },
+      ]);
       return box.id;
     }
   }
@@ -84,13 +96,17 @@ async function upsertBox(
     borderWidth: 1,
     textColor: BOX_TEXT,
     fontSize: FIELDS_BOX_FONT,
-    textAlign: 'left',
-    textAlignVertical: 'top',
+    textAlign: 'center',
+    textAlignVertical: 'middle',
   });
-  // Group with the element so moving the element moves the box. Grouping is
-  // cosmetic cohesion (the adapter swallows failures); housekeeping re-docks the
-  // box position as the safety net if the group didn't take.
-  await canvas.group([element.id, box.id]);
+  // Group the box with the element *and its existing group members* — a screen
+  // or automation is already a title+image group, so grouping the box with the
+  // image alone would split the image out and orphan the title. Re-grouping the
+  // whole set keeps title, image, and box moving as one. Grouping is cosmetic
+  // cohesion (the adapter swallows failures); housekeeping re-docks the box
+  // position as the safety net if the group didn't take.
+  const members = await canvas.groupMembers(element.id);
+  await canvas.group([...new Set([...members, box.id])]);
   return box.id;
 }
 

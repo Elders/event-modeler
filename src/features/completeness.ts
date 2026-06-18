@@ -10,9 +10,10 @@
 // check reflects whatever the panel has synced.
 
 import { incompleteConnectors, type FieldedElement } from '../domain/completeness';
-import { FLAGS_KEY, type ConnectorFlag } from '../domain/records';
+import { FLAGS_KEY, type ConnectorFlag, type FieldRecord } from '../domain/records';
+import type { CanvasConnector } from '../ports/canvas';
 import { services } from '../services';
-import { readFieldRecords } from './fields/model';
+import { displayMode, readFieldRecords } from './fields/model';
 
 // Miro's red; the default we fall back to if a flagged connector somehow had no
 // stroke color to remember.
@@ -44,7 +45,12 @@ async function checkCompleteness(): Promise<void> {
     id: record.element,
     fields: record.fields,
   }));
-  const flaggedNow = incompleteConnectors(elements, connectors);
+  // A screen/automation is a group, so a connector attaches to the group (or its
+  // title/box member) rather than the image that holds the fields. Resolve those
+  // endpoints back to the fielded element before checking, or the arrow could
+  // never see the source's fields and would stay red forever.
+  const resolved = await resolveGroupedEndpoints(connectors, records);
+  const flaggedNow = incompleteConnectors(elements, resolved);
 
   const byId = new Map(connectors.map((connector) => [connector.id, connector]));
   const previously = new Set(flags.map((flag) => flag.connector));
@@ -73,4 +79,33 @@ async function checkCompleteness(): Promise<void> {
   }
 
   if (changed) await store.write(FLAGS_KEY, kept);
+}
+
+// Rewrites connector endpoints that land on a grouped element so they point at
+// the group member that carries the fields. A screen or automation is a
+// title + image + box group; a connector can attach to the group id or to any
+// member, none of which is the image the field record is keyed by. Mapping the
+// group id and every member to the fielded member makes such connectors match.
+// Only box-display blocks (screens, automations) are grouped, so this is skipped
+// when none are present.
+async function resolveGroupedEndpoints(
+  connectors: CanvasConnector[],
+  records: FieldRecord[],
+): Promise<CanvasConnector[]> {
+  if (!records.some((record) => displayMode(record.type) === 'box')) return connectors;
+  const fielded = new Set(records.map((record) => record.element));
+  const groups = await services().canvas.groups();
+  const resolve = new Map<string, string>();
+  for (const group of groups) {
+    const target = group.members.find((member) => fielded.has(member));
+    if (!target) continue;
+    resolve.set(group.id, target);
+    for (const member of group.members) resolve.set(member, target);
+  }
+  if (resolve.size === 0) return connectors;
+  return connectors.map((connector) => ({
+    ...connector,
+    start: connector.start ? resolve.get(connector.start) ?? connector.start : null,
+    end: connector.end ? resolve.get(connector.end) ?? connector.end : null,
+  }));
 }

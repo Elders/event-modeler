@@ -132,8 +132,8 @@ export function fieldsBoxContent(fields: Field[]): string {
 // Box geometry, derived from the number of field lines.
 export const FIELDS_BOX_GAP = 16; // vertical space between the element and its box
 export const FIELDS_BOX_MIN_WIDTH = 220;
-export const FIELDS_BOX_FONT = 14;
-const FIELDS_BOX_LINE = 22; // px per field line
+export const FIELDS_BOX_FONT = 18;
+const FIELDS_BOX_LINE = 26; // px per field line
 const FIELDS_BOX_PADDING = 12; // vertical padding inside the box
 
 export function fieldsBoxHeight(fieldCount: number): number {

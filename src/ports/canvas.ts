@@ -31,6 +31,14 @@ export interface CanvasConnector {
   color: string | null;
 }
 
+// A group and the ids of its member items. Used to resolve a connector that
+// attaches to a grouped element (a screen/automation is a title+image+box
+// group) back to the member that carries the data.
+export interface CanvasGroup {
+  id: string;
+  members: string[];
+}
+
 // An immutable snapshot of one element on the canvas.
 export interface CanvasElement {
   id: string;
@@ -54,6 +62,9 @@ export interface ElementPatch {
   height?: number;
   content?: string;
   color?: string;
+  fontSize?: number;
+  textAlign?: 'left' | 'center' | 'right';
+  textAlignVertical?: 'top' | 'middle' | 'bottom';
 }
 
 export interface CardSpec {
@@ -126,12 +137,17 @@ export interface Canvas {
   containers(): Promise<CanvasElement[]>;
   childrenOf(containerId: string): Promise<CanvasElement[]>;
   connectors(): Promise<CanvasConnector[]>;
+  groups(): Promise<CanvasGroup[]>;
   selection(): Promise<CanvasElement[]>;
 
   // Mutations.
   apply(patches: ElementPatch[]): Promise<void>;
   addToContainer(containerId: string, childId: string, relX: number, relY: number): Promise<void>;
   group(ids: string[]): Promise<void>;
+  // The ids of every item grouped with the given one (itself included; just
+  // itself when ungrouped), so a new attachment can re-group with the whole set
+  // instead of splitting the element out of its existing group.
+  groupMembers(id: string): Promise<string[]>;
   remove(id: string): Promise<void>;
   // Sets a connector's stroke color (used by the completeness check to flag and
   // restore arrows). Connectors otherwise carry no app style overrides.

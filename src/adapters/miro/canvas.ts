@@ -10,6 +10,7 @@ import type {
   Canvas,
   CanvasConnector,
   CanvasElement,
+  CanvasGroup,
   CardSpec,
   ContainerSpec,
   ElementKind,
@@ -44,7 +45,7 @@ type WriteView = {
   width?: number;
   height?: number;
   content?: string;
-  style?: { fillColor?: string };
+  style?: { fillColor?: string; fontSize?: number; textAlign?: string; textAlignVertical?: string };
   sync(): Promise<unknown>;
 };
 
@@ -270,6 +271,14 @@ export class MiroCanvas implements Canvas {
     });
   }
 
+  async groups(): Promise<CanvasGroup[]> {
+    const groups = await miro.board.get({ type: 'group' });
+    return groups.map((group) => {
+      const g = group as unknown as { id: string; itemsIds?: string[] };
+      return { id: g.id, members: Array.isArray(g.itemsIds) ? g.itemsIds : [] };
+    });
+  }
+
   async selection(): Promise<CanvasElement[]> {
     const items = this.cacheAll(await miro.board.getSelection());
     return items.map((item) => this.snap(item));
@@ -289,6 +298,10 @@ export class MiroCanvas implements Canvas {
       if (patch.height !== undefined && 'height' in item) w.height = patch.height;
       if (patch.content !== undefined && 'content' in item) w.content = patch.content;
       if (patch.color !== undefined && w.style) w.style.fillColor = patch.color;
+      if (patch.fontSize !== undefined && w.style) w.style.fontSize = patch.fontSize;
+      if (patch.textAlign !== undefined && w.style) w.style.textAlign = patch.textAlign;
+      if (patch.textAlignVertical !== undefined && w.style)
+        w.style.textAlignVertical = patch.textAlignVertical;
       syncs.push(withRetry(() => w.sync()));
     }
     await Promise.all(syncs);
@@ -320,8 +333,13 @@ export class MiroCanvas implements Canvas {
   }
 
   async group(ids: string[]): Promise<void> {
-    await this.ensureLive(ids);
-    const items = ids.map((id) => this.items.get(id)).filter((item): item is LiveItem => !!item);
+    // Miro rejects grouping items that already belong to a group, so dissolve
+    // any group these items are in first — that is how a fields box joins a
+    // screen's existing title+image group (the caller passes the full member
+    // set). Re-fetch fresh handles afterwards: the ungroup invalidates the
+    // cached ones, and grouping stale handles silently no-ops.
+    await this.dissolveGroupsOf(ids);
+    const items = this.cacheAll(await miro.board.get({ id: ids }));
     if (items.length < 2) return;
     try {
       await miro.board.group({
@@ -330,6 +348,40 @@ export class MiroCanvas implements Canvas {
     } catch (error) {
       console.warn('Could not group elements', error);
     }
+  }
+
+  // Ungroups any group that contains one of the given ids, freeing its members
+  // so they can be regrouped. Best-effort — a failure here must not block the
+  // regroup that follows.
+  private async dissolveGroupsOf(ids: string[]): Promise<void> {
+    try {
+      const wanted = new Set(ids);
+      const groups = await miro.board.get({ type: 'group' });
+      for (const group of groups) {
+        const g = group as unknown as { itemsIds?: string[]; ungroup?: () => Promise<unknown> };
+        if (g.ungroup && Array.isArray(g.itemsIds) && g.itemsIds.some((m) => wanted.has(m))) {
+          await g.ungroup();
+        }
+      }
+    } catch (error) {
+      console.warn('Could not dissolve existing groups before regrouping', error);
+    }
+  }
+
+  async groupMembers(id: string): Promise<string[]> {
+    // Query the live group list rather than the item's cached `groupId` — the
+    // cached handle can predate the grouping (it was created ungrouped), so its
+    // groupId reads stale. The group's own `itemsIds` is always current.
+    try {
+      const groups = await miro.board.get({ type: 'group' });
+      for (const group of groups) {
+        const itemsIds = (group as unknown as { itemsIds?: string[] }).itemsIds;
+        if (Array.isArray(itemsIds) && itemsIds.includes(id)) return itemsIds;
+      }
+    } catch (error) {
+      console.warn('Could not read group members', error);
+    }
+    return [id];
   }
 
   async remove(id: string): Promise<void> {
