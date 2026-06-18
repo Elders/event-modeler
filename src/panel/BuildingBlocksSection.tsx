@@ -8,7 +8,7 @@ import { useRef } from 'react';
 import { BLOCKS, type PaletteKind } from '../domain/vocabulary';
 import { createBlockAtCenter } from '../features/createBlock';
 import { createSliceAroundSelection } from '../features/slices';
-import { insertSwimlanes } from '../features/swimlanes';
+import { insertSwimlane } from '../features/swimlane';
 import { addSpecification } from '../features/specs/create';
 import { Swatch } from './Swatch';
 import type { Guard } from './useBusyGuard';
@@ -45,10 +45,10 @@ const TILES: PaletteTile[] = [
     placeOnClick: addSpecification,
   },
   {
-    kind: 'swimlanes',
-    label: 'Swimlanes',
-    hint: 'three lane guides',
-    placeOnClick: insertSwimlanes,
+    kind: 'swimlane',
+    label: 'Swimlane',
+    hint: 'one lane guide',
+    placeOnClick: insertSwimlane,
   },
 ];
 

@@ -40,12 +40,16 @@
   font-size: 15px;
 }
 
-.glyph-lanes {
+.glyph-lane {
   border: 1.5px solid #b4b2a9;
   border-radius: 5px;
-  color: #5f5e5a;
-  font-size: 17px;
-  line-height: 1;
+}
+
+.lane-bar {
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+  background: #8e8e9c;
 }
 
 .slice-tab {

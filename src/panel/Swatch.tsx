@@ -34,10 +34,10 @@ export function Swatch({ kind }: { kind: PaletteKind }) {
       </span>
     );
   }
-  if (kind === 'swimlanes') {
+  if (kind === 'swimlane') {
     return (
-      <span className="swatch glyph glyph-lanes" aria-hidden="true">
-        ≡
+      <span className="swatch glyph glyph-lane" aria-hidden="true">
+        <span className="lane-bar" />
       </span>
     );
   }

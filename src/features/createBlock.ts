@@ -10,7 +10,7 @@ import { createSketchScreen } from './screens';
 import { createSlice } from './slices';
 import { createSpecification } from './specs/create';
 import { createSticky } from './stickies';
-import { insertSwimlanes } from './swimlanes';
+import { insertSwimlane } from './swimlane';
 
 export async function createBlock(
   type: BlockType,
@@ -38,8 +38,8 @@ export async function placePaletteItem(kind: PaletteKind, x: number, y: number):
     await createSpecification(null, { x, y });
     return;
   }
-  if (kind === 'swimlanes') {
-    await insertSwimlanes({ x, y });
+  if (kind === 'swimlane') {
+    await insertSwimlane({ x, y });
     return;
   }
   await createBlock(kind, x, y);

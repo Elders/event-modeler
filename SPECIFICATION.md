@@ -119,12 +119,13 @@ through container resizes.
 
 ## 6. Features
 
-### 6.1 Swimlanes
+### 6.1 Swimlane
 
-A single action inserts three stacked **lane guides** labeled "Screens",
-"Commands & read models", and "Events". Guides are inert decoration:
-transparent, faintly bordered, never capturing or occluding the elements
-modeled on top of them. The tool does not track them after creation.
+A single action inserts one **lane guide** — placed one at a time, stack
+several for the conventional "Screens", "Commands & read models", and "Events"
+rows. Guides are inert decoration: transparent, faintly bordered, never
+capturing or occluding the elements modeled on top of them. The tool does not
+track them after creation.
 
 ### 6.2 Pattern stamps
 
