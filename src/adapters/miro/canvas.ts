@@ -60,9 +60,32 @@ function isRateLimited(error: unknown): boolean {
   return message.includes('429') || message.includes('too many requests') || message.includes('rate limit');
 }
 
-const RETRY_DELAYS_MS = [500, 1000, 2000, 4000];
+// Backoff schedule for rate-limited (429) writes. Generous tail so a bulk
+// operation rides out even a per-minute window and completes, rather than
+// giving up partway. This is the backstop; bulk pacing (below) is the first line.
+const RETRY_DELAYS_MS = [500, 1000, 2000, 4000, 8000, 16000, 30000];
+
+// Proactive pacing for bulk operations (model generation). With bulk mode on,
+// each write reserves a time slot BULK_WRITE_GAP_MS after the previous one, so a
+// burst of creates flows at a steady rate under Miro's limit instead of tripping
+// it. The slot is reserved synchronously, before any await, so even Promise.all'd
+// writes are spaced without a race. Off (gap 0) for normal per-action writes,
+// which never approach the limit.
+const BULK_WRITE_GAP_MS = 500;
+let bulkGapMs = 0;
+let nextWriteSlot = 0;
+
+async function pace(): Promise<void> {
+  if (bulkGapMs <= 0) return;
+  const now = Date.now();
+  const slot = Math.max(now, nextWriteSlot);
+  nextWriteSlot = slot + bulkGapMs;
+  const wait = slot - now;
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+}
 
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  await pace();
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn();
@@ -71,6 +94,14 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
     }
   }
+}
+
+// Enables/disables the proactive write pacing above. A burst hint, not board
+// state: the headless board script keeps its own module instance, so toggling it
+// in the panel only paces the panel's writes (generation).
+export function setBulkWrites(on: boolean): void {
+  bulkGapMs = on ? BULK_WRITE_GAP_MS : 0;
+  if (on) nextWriteSlot = Date.now();
 }
 
 function kindOf(type: string): ElementKind {
@@ -474,6 +505,10 @@ export class MiroCanvas implements Canvas {
     } catch (error) {
       console.warn('Could not settle a created element into its frame', error);
     }
+  }
+
+  setBulkMode(on: boolean): void {
+    setBulkWrites(on);
   }
 
   async deselect(): Promise<void> {

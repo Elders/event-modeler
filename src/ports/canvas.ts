@@ -178,6 +178,10 @@ export interface Canvas {
   // to the intended absolute position. A canvas without auto-capture no-ops it.
   settle(id: string, absX: number, absY: number): Promise<void>;
 
+  // Hint that a burst of writes is coming (model generation); the adapter may
+  // pace them to stay under a host rate limit. A no-op where there is no limit.
+  setBulkMode(on: boolean): void;
+
   // Selection and references.
   deselect(): Promise<void>;
   deepLink(id: string): Promise<string | null>;

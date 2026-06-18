@@ -7,6 +7,7 @@
 // coerces a loosely-shaped object into a safe ModelPlan, dropping anything that
 // doesn't reference real blocks so the build step can assume well-formed data.
 
+import type { FieldType } from './fields';
 import { STICKY_LABEL, type BlockType, type StickyBlockType } from './vocabulary';
 
 // Every block a plan may place — the full vocabulary minus 'slice', since slices
@@ -40,6 +41,15 @@ const DEFAULT_LANE: Record<PlannableBlockType, PlanLane> = {
   error: 1,
 };
 
+// A typed datum a block carries. The generator restricts a field's type to the
+// concrete set (no free-text "custom"), so the plan stays machine-checkable.
+export interface PlannedField {
+  name: string;
+  type: FieldType;
+}
+
+const PLAN_FIELD_TYPES: FieldType[] = ['string', 'number', 'date', 'time', 'datetime', 'uuid'];
+
 export interface PlannedBlock {
   ref: string;
   type: PlannableBlockType;
@@ -47,6 +57,8 @@ export interface PlannedBlock {
   lane: PlanLane;
   // Column within the slice (0-based), so a slice can hold a multi-step flow.
   column: number;
+  // Data the block carries (name + type); empty for blocks without data.
+  fields: PlannedField[];
 }
 
 export interface PlannedSlice {
@@ -94,6 +106,19 @@ function isStickyType(type: PlannableBlockType): type is StickyBlockType {
   return (STICKY_TYPES as PlannableBlockType[]).includes(type);
 }
 
+// Keep only well-formed fields: a non-empty name and one of the concrete types.
+function normalizeFields(raw: unknown): PlannedField[] {
+  const fields: PlannedField[] = [];
+  for (const rawField of asArray(raw)) {
+    const f = (rawField ?? {}) as Record<string, unknown>;
+    const name = asString(f.name);
+    const type = asString(f.type) as FieldType;
+    if (!name || !PLAN_FIELD_TYPES.includes(type)) continue;
+    fields.push({ name, type });
+  }
+  return fields;
+}
+
 // Coerce a loosely-shaped Planner result into a safe ModelPlan: keep only
 // well-typed blocks with unique refs, links between known blocks, and spec-zone
 // references that point at real sticky cards (only cards can be copied).
@@ -123,7 +148,14 @@ export function normalizePlan(raw: unknown): ModelPlan {
 
       const label = asString(b.label) || STICKY_LABEL[type as StickyBlockType] || type;
       const column = Number.isFinite(b.column) ? Math.max(0, Math.floor(b.column as number)) : 0;
-      blocks.push({ ref: blockRef, type, label, lane: asLane(b.lane, DEFAULT_LANE[type]), column });
+      blocks.push({
+        ref: blockRef,
+        type,
+        label,
+        lane: asLane(b.lane, DEFAULT_LANE[type]),
+        column,
+        fields: normalizeFields(b.fields),
+      });
     }
     if (blocks.length === 0) continue;
     slices.push({ ref, title: asString(s.title) || 'Slice', blocks });

@@ -54,7 +54,7 @@ const TILES: PaletteTile[] = [
   {
     kind: 'chapter',
     label: 'Chapter',
-    hint: 'a labeled phase arrow',
+    hint: 'groups slices into a context',
     placeOnClick: insertChapter,
   },
 ];

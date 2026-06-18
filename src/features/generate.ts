@@ -8,27 +8,51 @@
 // explicitly so they move with the slice, while grouped screen/automation pairs
 // rely on the frame capturing them on creation (re-parenting would split them).
 
-import { blockPosition, placeSlices } from '../domain/plan';
+import { blockPosition, placeSlices, type ModelPlan } from '../domain/plan';
 import type { SpecZoneId } from '../domain/spec';
 import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
+import {
+  FIELDS_KEY,
+  isFieldable,
+  newFieldId,
+  readFieldRecords,
+  type FieldRecord,
+} from './fields/model';
+import { renderFields } from './fields/render';
 import { ensureVisible, requirePlanner, viewportCenter } from './helpers';
 import { createSlice } from './slices';
 import { createSpecification } from './specs/create';
 import { placeLinkedCopies } from './specs/copies';
 
 export async function generateModel(text: string): Promise<void> {
-  const { canvas, notifier } = services();
   const plan = await requirePlanner().plan(text);
+  const { canvas } = services();
+  // Pace the board writes while building — a whole model is write-heavy enough
+  // to trip Miro's rate limit if it bursts unthrottled. Always cleared, even on
+  // failure, so later per-action writes run at full speed.
+  canvas.setBulkMode(true);
+  try {
+    await buildModel(plan);
+  } finally {
+    canvas.setBulkMode(false);
+  }
+}
 
+async function buildModel(plan: ModelPlan): Promise<void> {
+  const { canvas, notifier } = services();
   const { x: cx, y: cy } = await viewportCenter();
   const placements = placeSlices(plan, cx, cy);
 
   // ref -> created element, for wiring links and spec copies afterwards.
   const blocks = new Map<string, CanvasElement>();
   const sliceFrames: CanvasElement[] = [];
+  // Field records are rendered per block but persisted in one write at the end,
+  // instead of a read-modify-write of the registry per block — generating a
+  // whole model is write-heavy enough to trip Miro's rate limit otherwise.
+  const fieldRecords: FieldRecord[] = [];
 
   // Everything is created sequentially: generating a whole model is far more
   // SDK calls than any manual action, and bursting them in parallel trips
@@ -52,8 +76,30 @@ export async function generateModel(text: string): Promise<void> {
       if (element.kind === 'card') {
         await canvas.addToContainer(frame.id, element.id, x - frameLeft, y - frameTop);
       }
+      // Attach any planned fields (text on stickies, a box on screens/automations).
+      // Render now, persist the registry once after the loop.
+      if (block.fields.length > 0 && isFieldable(block.type)) {
+        const record: FieldRecord = {
+          element: element.id,
+          type: block.type,
+          fields: block.fields.map((field) => ({
+            id: newFieldId(),
+            name: field.name,
+            type: field.type,
+          })),
+          card: null,
+        };
+        await renderFields(record, element);
+        fieldRecords.push(record);
+      }
       blocks.set(block.ref, element);
     }
+  }
+
+  // One registry write for every field-bearing block built above.
+  if (fieldRecords.length > 0) {
+    const existing = await readFieldRecords();
+    await services().store.write(FIELDS_KEY, [...existing, ...fieldRecords]);
   }
 
   // Connectors use SDK defaults; not every element accepts an endpoint, so a
