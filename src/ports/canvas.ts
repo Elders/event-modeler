@@ -105,6 +105,21 @@ export interface ContainerSpec {
   fill: string;
 }
 
+// A free-standing arrow: a connector between two absolute points (not attached
+// to any item), drawn in the canvas default style except for an optional color
+// and thickness, with an optional caption carried on the line itself. Used for
+// the Chapter marker.
+export interface ArrowSpec {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  color?: string;
+  thickness?: number;
+  // Caption rendered on the connector (above the line), with its own color/size.
+  text?: string;
+  textColor?: string;
+  fontSize?: number;
+}
+
 export interface ShapeSpec {
   shape: string;
   x: number;
@@ -131,6 +146,8 @@ export interface Canvas {
   createShape(spec: ShapeSpec): Promise<CanvasElement>;
   // A directional link between two elements, drawn in the canvas default style.
   createLink(fromId: string, toId: string): Promise<void>;
+  // A free-standing arrow between two points (the Chapter marker).
+  createArrow(spec: ArrowSpec): Promise<CanvasElement>;
 
   // Queries.
   get(ids: string[]): Promise<CanvasElement[]>;

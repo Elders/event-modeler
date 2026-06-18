@@ -19,11 +19,13 @@ into two tabs — **Build** (the manual modeling palette) and **Generate** (AI):
   placed inside move with it; rename it via its title; the **+** button at its
   bottom edge adds a specification beneath it). Screens are deliberately not
   frames — connectors can't attach to frames, and screens must be linkable
-  into flows. The palette also includes two tool tiles — **Specification**
-  (a Given/When/Then frame, below) and **Swimlane** (a single transparent lane
+  into flows. The palette also includes three tool tiles — **Specification**
+  (a Given/When/Then frame, below), **Swimlane** (a single transparent lane
   guide; stack several for the conventional Screens / Commands & read models /
-  Events rows) — drag or click them like any block. To paste a screenshot onto
-  a sketch screen, click the board first
+  Events rows), and **Chapter** (a thick horizontal arrow with an editable,
+  grouped title above it, marking a phase of the timeline) — drag or click them
+  like any block. To paste a screenshot onto a sketch screen, click the board
+  first
   (so the canvas has focus), then Ctrl+V.
 - **Pattern stamps** — one-click pre-linked slices for the four event-modeling
   patterns: command, view, automation, translation. Further linking is done

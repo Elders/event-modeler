@@ -45,6 +45,14 @@
   border-radius: 5px;
 }
 
+.glyph-chapter {
+  border: 1.5px solid #b4b2a9;
+  border-radius: 5px;
+  color: #2bb8df;
+  font-size: 16px;
+  font-weight: 700;
+}
+
 .lane-bar {
   width: 14px;
   height: 3px;

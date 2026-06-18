@@ -7,6 +7,7 @@ import './BuildingBlocksSection.css';
 import { useRef } from 'react';
 import { BLOCKS, type PaletteKind } from '../domain/vocabulary';
 import { createBlockAtCenter } from '../features/createBlock';
+import { insertChapter } from '../features/chapter';
 import { createSliceAroundSelection } from '../features/slices';
 import { insertSwimlane } from '../features/swimlane';
 import { addSpecification } from '../features/specs/create';
@@ -49,6 +50,12 @@ const TILES: PaletteTile[] = [
     label: 'Swimlane',
     hint: 'one lane guide',
     placeOnClick: insertSwimlane,
+  },
+  {
+    kind: 'chapter',
+    label: 'Chapter',
+    hint: 'a labeled phase arrow',
+    placeOnClick: insertChapter,
   },
 ];
 

@@ -5,6 +5,7 @@
 import type { BlockType, PaletteKind } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
 import { createAutomation } from './automation';
+import { insertChapter } from './chapter';
 import { viewportCenter } from './helpers';
 import { createSketchScreen } from './screens';
 import { createSlice } from './slices';
@@ -40,6 +41,10 @@ export async function placePaletteItem(kind: PaletteKind, x: number, y: number):
   }
   if (kind === 'swimlane') {
     await insertSwimlane({ x, y });
+    return;
+  }
+  if (kind === 'chapter') {
+    await insertChapter({ x, y });
     return;
   }
   await createBlock(kind, x, y);

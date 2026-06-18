@@ -7,6 +7,7 @@
 
 import type { ElementMeta } from '../../domain/meta';
 import type {
+  ArrowSpec,
   Canvas,
   CanvasConnector,
   CanvasElement,
@@ -230,6 +231,32 @@ export class MiroCanvas implements Canvas {
     await withRetry(() =>
       miro.board.createConnector({ start: { item: fromId }, end: { item: toId } }),
     );
+  }
+
+  async createArrow(spec: ArrowSpec): Promise<CanvasElement> {
+    type Arg = Parameters<typeof miro.board.createConnector>[0];
+    // Free-position endpoints (no item), a straight line, default stroke caps
+    // (so the head matches Miro's default linking arrow) — only color, width and
+    // an optional on-line caption are overridden.
+    const connector = this.cache(
+      await withRetry(() =>
+        miro.board.createConnector({
+          shape: 'straight',
+          start: { position: { x: spec.start.x, y: spec.start.y } },
+          end: { position: { x: spec.end.x, y: spec.end.y } },
+          style: {
+            ...(spec.color !== undefined ? { strokeColor: spec.color } : {}),
+            ...(spec.thickness !== undefined ? { strokeWidth: spec.thickness } : {}),
+            ...(spec.textColor !== undefined ? { color: spec.textColor } : {}),
+            ...(spec.fontSize !== undefined ? { fontSize: spec.fontSize } : {}),
+          },
+          ...(spec.text !== undefined
+            ? { captions: [{ content: spec.text, position: 0.5, textAlignVertical: 'top' }] }
+            : {}),
+        } as Arg),
+      ),
+    );
+    return this.snap(connector);
   }
 
   async get(ids: string[]): Promise<CanvasElement[]> {

@@ -41,5 +41,12 @@ export function Swatch({ kind }: { kind: PaletteKind }) {
       </span>
     );
   }
+  if (kind === 'chapter') {
+    return (
+      <span className="swatch glyph glyph-chapter" aria-hidden="true">
+        ➜
+      </span>
+    );
+  }
   return <span className={`swatch bg-${kind}`} />;
 }
