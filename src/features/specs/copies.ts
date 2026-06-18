@@ -1,6 +1,8 @@
-// Linked shallow copies: cards copied into a spec zone, carrying a navigable
-// reference back to their originals, with a one-way content/color sync from
-// source to copy.
+// Linked copies: cards copied into a spec zone as real typed blocks — the
+// source's type is carried onto the copy, so the copy is recognized by the Fields
+// editor and its fields can be edited. Each copy keeps a navigable reference back
+// to its original and a one-way *color* sync; its text (and the fields in it) is
+// the user's own and is never synced over.
 
 import type { CanvasElement, ElementPatch } from '../../ports/canvas';
 import { services } from '../../services';
@@ -105,6 +107,10 @@ export async function placeZoneCards(
     });
     await canvas.addToContainer(spec.id, created.id, offset.x, offset.y);
     if (card.source) {
+      // Carry the source's type onto the copy so it's a real typed block whose
+      // fields are editable — not an anonymous sticky.
+      const meta = await canvas.getMeta(card.source.id);
+      if (meta) await canvas.setMeta(created.id, meta);
       links.push({ source: card.source.id, copy: created.id, spec: spec.id });
       linked = true;
     }
@@ -114,8 +120,9 @@ export async function placeZoneCards(
   return cards.length;
 }
 
-// One-way sync: edits to a source card propagate to its spec copies. There are
-// no item-update or item-delete events, so housekeeping polls this.
+// Housekeeping for spec copies: prune links whose copy was deleted, and follow
+// the source's color (only) onto its copies. The copy's text is left alone so
+// its fields stay editable. There are no item-update/delete events, so this polls.
 export async function syncSpecCopies(): Promise<void> {
   const { canvas, store } = services();
   try {
@@ -137,12 +144,10 @@ export async function syncSpecCopies(): Promise<void> {
       }
       alive.push(link);
       if (!source || source.kind !== 'card') continue;
-      if (source.content !== copy.content || source.color !== copy.color) {
-        patches.push({
-          id: copy.id,
-          content: source.content ?? '',
-          ...(source.color ? { color: source.color } : {}),
-        });
+      // Only the color follows the source — the copy's text (and its fields) is
+      // the user's to edit, so it is never overwritten.
+      if (source.color && source.color !== copy.color) {
+        patches.push({ id: copy.id, color: source.color });
       }
     }
     if (patches.length > 0) await canvas.apply(patches);
