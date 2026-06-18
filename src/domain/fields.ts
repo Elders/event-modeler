@@ -61,16 +61,16 @@ export function formatField(field: Field): string {
   return `${field.name} : ${fieldTypeLabel(field)}`;
 }
 
-// The sticky's full text: the block name on the first line, then one paragraph
-// per field. There is no delimiter — the name is simply the first line and the
-// fields follow — so a manual rename just edits that first line. Each part is
-// HTML-escaped. (Names are non-empty by default, so the first-line convention
-// stays unambiguous in practice.)
+// The sticky's full text: the block name on the first line, then — when there
+// are fields — a blank line and one paragraph per field. There is no delimiter;
+// the name is simply the first line, so a manual rename just edits it. Each part
+// is HTML-escaped, and the blank line (&nbsp;) decodes to empty so the parsers
+// skip over it.
 export function renderStickyContent(name: string, fields: Field[]): string {
   const head = `<p>${escapeHtml(name)}</p>`;
   if (fields.length === 0) return head;
   const lines = fields.map((field) => `<p>${escapeHtml(formatField(field))}</p>`).join('');
-  return head + lines;
+  return `${head}<p>&nbsp;</p>${lines}`;
 }
 
 // The block name recovered from a sticky's text: the first line.
@@ -102,12 +102,14 @@ export function parseStickyFields(content: string | null, existing: Field[] = []
 }
 
 function parseFieldLine(line: string): Field {
-  // Split on the last " : " so a custom type label (which has none) stays whole
-  // and any stray colon in the name is kept on the name side.
-  const sep = line.lastIndexOf(' : ');
-  if (sep < 0) return { id: newFieldId(), name: line.trim(), type: 'string' };
-  const name = line.slice(0, sep).trim();
-  return { id: newFieldId(), name, ...typeFromLabel(line.slice(sep + 3).trim()) };
+  // Split on the first colon: the name is everything before it, the type label
+  // everything after. This keeps an empty name empty — a line like ": string"
+  // that lost its leading space when the HTML round-trip trimmed it — and still
+  // leaves any colon inside a custom type label on the label side.
+  const colon = line.indexOf(':');
+  if (colon < 0) return { id: newFieldId(), name: line.trim(), type: 'string' };
+  const name = line.slice(0, colon).trim();
+  return { id: newFieldId(), name, ...typeFromLabel(line.slice(colon + 1).trim()) };
 }
 
 // Maps a displayed type label back to a FieldType; an unrecognized label
