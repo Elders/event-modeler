@@ -74,9 +74,13 @@ const RETRY_DELAYS_MS = [500, 1000, 2000, 4000, 8000, 16000, 30000];
 const BULK_WRITE_GAP_MS = 500;
 let bulkGapMs = 0;
 let nextWriteSlot = 0;
+// Set when the in-flight bulk operation is aborting (Pause): pacing is dropped so
+// the current unit finishes fast and the build can stop at its next boundary —
+// otherwise Pause would wait out a unit's worth of 500ms gaps (slow on specs).
+let bulkAborting = false;
 
 async function pace(): Promise<void> {
-  if (bulkGapMs <= 0) return;
+  if (bulkGapMs <= 0 || bulkAborting) return;
   const now = Date.now();
   const slot = Math.max(now, nextWriteSlot);
   nextWriteSlot = slot + bulkGapMs;
@@ -101,7 +105,10 @@ async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
 // in the panel only paces the panel's writes (generation).
 export function setBulkWrites(on: boolean): void {
   bulkGapMs = on ? BULK_WRITE_GAP_MS : 0;
-  if (on) nextWriteSlot = Date.now();
+  if (on) {
+    nextWriteSlot = Date.now();
+    bulkAborting = false;
+  }
 }
 
 function kindOf(type: string): ElementKind {
@@ -507,8 +514,14 @@ export class MiroCanvas implements Canvas {
     }
   }
 
-  setBulkMode(on: boolean): void {
+  setBulkMode(on: boolean, signal?: AbortSignal): void {
     setBulkWrites(on);
+    // Drop pacing the instant the run is aborted, so Pause is prompt even in the
+    // middle of a write-heavy unit (a spec). The build still stops at its next
+    // boundary; this just stops the 500ms gaps from drawing it out.
+    if (on && signal) {
+      signal.addEventListener('abort', () => void (bulkAborting = true), { once: true });
+    }
   }
 
   async deselect(): Promise<void> {

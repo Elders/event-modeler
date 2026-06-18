@@ -19,6 +19,22 @@
   border-color: #4262ff;
 }
 
+/* Stop / Resume / Discard sit in a row; the primary action grows to fill it. */
+.generate-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.generate-grow {
+  flex: 1 1 auto;
+}
+
+.generate-resume-text {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--em-muted);
+}
+
 .generate-settings {
   margin-top: 10px;
 }

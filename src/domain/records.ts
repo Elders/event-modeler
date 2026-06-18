@@ -41,6 +41,7 @@ export const SLICES_KEY = 'em-slices';
 export const LINKS_KEY = 'em-links';
 export const FIELDS_KEY = 'em-fields';
 export const FLAGS_KEY = 'em-flags';
+export const GEN_CHECKPOINT_KEY = 'em-gen';
 
 // Earlier versions stored plain container-id strings; normalize them to
 // records so data written by older versions stays readable.

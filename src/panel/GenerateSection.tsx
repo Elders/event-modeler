@@ -1,10 +1,15 @@
 // Generate a model from pasted text. A textarea + button drive the
-// `generateModel` feature; a collapsible settings block holds the Anthropic API
-// key (stored per-browser, never on the board) and the model picker.
+// `generateModel` feature; generation can be paused mid-build and resumed —
+// a paused build (interrupted by Pause, a reload, or a failure) is persisted on
+// the board, so a banner offers Resume/Discard until it's finished. A
+// collapsible settings block holds the Anthropic API key (stored per-browser,
+// never on the board) and the model picker.
 
 import './GenerateSection.css';
-import { useState } from 'react';
-import { generateModel } from '../features/generate';
+import { useEffect, useRef, useState } from 'react';
+import type { GenerationCheckpoint } from '../domain/plan';
+import { generateModel, resumeGeneration } from '../features/generate';
+import { clearCheckpoint, loadCheckpoint } from '../features/generateCheckpoint';
 import {
   getPlannerSettings,
   plannerConfigured,
@@ -12,6 +17,13 @@ import {
   savePlannerSettings,
 } from '../features/plannerSettings';
 import type { Guard } from './useBusyGuard';
+
+function resumeLabel(checkpoint: GenerationCheckpoint): string {
+  if (!checkpoint.plan) return 'Generation paused before building.';
+  const done = checkpoint.progress.slice;
+  const total = checkpoint.plan.slices.length;
+  return `Generation paused — ${done} of ${total} slice${total === 1 ? '' : 's'} done.`;
+}
 
 export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }) {
   const models = plannerModels();
@@ -22,12 +34,44 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
   const [configured, setConfigured] = useState(plannerConfigured());
   const [settingsOpen, setSettingsOpen] = useState(!plannerConfigured());
 
+  // A paused build persisted on the board (null = none), and whether *our* run
+  // is currently active. The abort controller is held across renders so Stop can
+  // reach it while the guarded run is in flight.
+  const [checkpoint, setCheckpoint] = useState<GenerationCheckpoint | null>(null);
+  const [running, setRunning] = useState(false);
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const refreshCheckpoint = () => void loadCheckpoint().then(setCheckpoint);
+  useEffect(refreshCheckpoint, []);
+
   const persist = (nextKey: string, nextModel: string) => {
     savePlannerSettings({ apiKey: nextKey, model: nextModel });
     setConfigured(nextKey.trim().length > 0);
   };
 
   const canGenerate = configured && text.trim().length > 0;
+
+  // Wrap a run in the shared busy guard (so the rest of the panel is locked and
+  // real errors toast), plus our own running state + a fresh abort controller.
+  // Pause is deliberately NOT guarded — it just trips the controller.
+  const run = (action: (signal: AbortSignal) => Promise<void>) =>
+    guard(async () => {
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      setRunning(true);
+      try {
+        await action(controller.signal);
+      } finally {
+        controllerRef.current = null;
+        setRunning(false);
+        refreshCheckpoint();
+      }
+    });
+
+  const onGenerate = run((signal) => generateModel(text, signal));
+  const onResume = run((signal) => resumeGeneration(signal));
+  const onPause = () => controllerRef.current?.abort();
+  const onDiscard = () => void clearCheckpoint().then(refreshCheckpoint);
 
   return (
     <section className="section">
@@ -40,16 +84,45 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={5}
+        disabled={running}
       />
 
-      <button
-        className="button button-primary button-small w-full"
-        type="button"
-        disabled={busy || !canGenerate}
-        onClick={guard(() => generateModel(text))}
-      >
-        {busy ? 'Generating…' : 'Generate model'}
-      </button>
+      {running ? (
+        <div className="generate-actions">
+          <button className="button button-primary button-small generate-grow" type="button" disabled>
+            Generating…
+          </button>
+          <button className="button button-small" type="button" onClick={onPause}>
+            Pause
+          </button>
+        </div>
+      ) : checkpoint ? (
+        <div className="generate-resume">
+          <p className="generate-resume-text">{resumeLabel(checkpoint)}</p>
+          <div className="generate-actions">
+            <button
+              className="button button-primary button-small generate-grow"
+              type="button"
+              disabled={busy || !configured}
+              onClick={onResume}
+            >
+              Resume
+            </button>
+            <button className="button button-small" type="button" disabled={busy} onClick={onDiscard}>
+              Discard
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          className="button button-primary button-small w-full"
+          type="button"
+          disabled={busy || !canGenerate}
+          onClick={onGenerate}
+        >
+          Generate model
+        </button>
+      )}
 
       {!configured && (
         <p className="footnote">Add your Anthropic API key in settings below to enable this.</p>

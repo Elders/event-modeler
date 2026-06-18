@@ -1,6 +1,6 @@
 // Pattern stamps: the four event-modeling patterns as pre-linked groups.
-// Columns step along the timeline; lanes are screens (-1), commands & read
-// models (0), events (1).
+// Columns step along the timeline; lanes are actors — screens and automations
+// (-1), commands & read models (0), events (1).
 
 import type { BlockType } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
@@ -54,7 +54,7 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
   automation: {
     nodes: [
       { block: 'readModel', col: 0, lane: 0 },
-      { block: 'automation', col: 1, lane: 0 },
+      { block: 'automation', col: 1, lane: -1 },
       { block: 'command', col: 2, lane: 0 },
       { block: 'event', col: 2, lane: 1 },
     ],
@@ -67,7 +67,7 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
   translation: {
     nodes: [
       { block: 'externalEvent', col: 0, lane: 1 },
-      { block: 'automation', col: 1, lane: 0 },
+      { block: 'automation', col: 1, lane: -1 },
       { block: 'command', col: 2, lane: 0 },
       { block: 'event', col: 2, lane: 1 },
     ],
@@ -85,7 +85,7 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
       { block: 'command', col: 0, lane: 0 },
       { block: 'event', col: 0, lane: 1 },
       { block: 'readModel', col: 1, lane: 0 },
-      { block: 'automation', col: 2, lane: 0 },
+      { block: 'automation', col: 2, lane: -1 },
       { block: 'command', col: 3, lane: 0 },
       { block: 'event', col: 3, lane: 1 },
     ],
@@ -106,7 +106,7 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
       { block: 'command', col: 0, lane: 0 },
       { block: 'event', col: 0, lane: 1 },
       { block: 'readModel', col: 1, lane: 0 },
-      { block: 'automation', col: 2, lane: 0 },
+      { block: 'automation', col: 2, lane: -1 },
       { block: 'command', col: 3, lane: 0 },
       { block: 'event', col: 3, lane: 1 },
     ],

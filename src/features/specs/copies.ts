@@ -18,12 +18,42 @@ import {
   type SpecZoneId,
 } from './model';
 
+// One card to place in a spec zone: its text and color, and — for a linked copy
+// — the source element it mirrors (a source records a back-link and joins the
+// content sync; a sourceless card, e.g. an error sticky, does neither).
+export interface ZoneCard {
+  content: string;
+  color: string;
+  source?: CanvasElement;
+}
+
 // Creates linked shallow copies of the given cards inside one spec zone.
 export async function placeLinkedCopies(
   spec: CanvasElement,
   zoneId: SpecZoneId,
   sources: CanvasElement[],
 ): Promise<number> {
+  return placeZoneCards(
+    spec,
+    zoneId,
+    sources.map((source) => ({
+      content: source.content ?? '',
+      color: source.color ?? 'orange',
+      source,
+    })),
+  );
+}
+
+// Places cards into one spec zone, growing the zone (and the frame, downward) to
+// fit. Cards with a `source` become linked copies (back-link + content sync);
+// sourceless cards are placed as-is. Shared by linked-copy placement and by
+// dropping error stickies into a spec's Then zone.
+export async function placeZoneCards(
+  spec: CanvasElement,
+  zoneId: SpecZoneId,
+  cards: ZoneCard[],
+): Promise<number> {
+  if (cards.length === 0) return 0;
   const { canvas, store } = services();
   const records = await readSpecRecords();
   const record = records.find((entry) => entry.frame === spec.id);
@@ -37,11 +67,11 @@ export async function placeLinkedCopies(
 
   const columns = specColumns(spec.width);
 
-  // Grow the zone (and the frame, downward) when the new copies won't fit;
+  // Grow the zone (and the frame, downward) when the new cards won't fit;
   // everything below the zone shifts down by the same amount. The top edge
   // stays in place.
   let workingSpec = spec;
-  const required = requiredZoneHeight(occupied + sources.length, columns);
+  const required = requiredZoneHeight(occupied + cards.length, columns);
   if (required > zone.height) {
     const delta = required - zone.height;
     await canvas.apply([{ id: spec.id, y: spec.y + delta / 2, height: spec.height + delta }]);
@@ -59,25 +89,29 @@ export async function placeLinkedCopies(
   }
 
   const links = await store.read<SpecLink[]>(LINKS_KEY, []);
+  let linked = false;
   const specTop = workingSpec.y - workingSpec.height / 2;
   const specLeft = workingSpec.x - workingSpec.width / 2;
-  for (const source of sources) {
+  for (const card of cards) {
     const offset = copyOffset(zone.top, occupied, columns);
-    const link = await canvas.deepLink(source.id);
-    const copy = await canvas.createCard({
+    const link = card.source ? await canvas.deepLink(card.source.id) : null;
+    const created = await canvas.createCard({
       x: specLeft + offset.x,
       y: specTop + offset.y,
       width: SPEC_COPY_WIDTH,
-      content: source.content ?? '',
-      color: source.color ?? 'orange',
+      content: card.content,
+      color: card.color,
       ...(link ? { link } : {}),
     });
-    await canvas.addToContainer(spec.id, copy.id, offset.x, offset.y);
-    links.push({ source: source.id, copy: copy.id, spec: spec.id });
+    await canvas.addToContainer(spec.id, created.id, offset.x, offset.y);
+    if (card.source) {
+      links.push({ source: card.source.id, copy: created.id, spec: spec.id });
+      linked = true;
+    }
     occupied += 1;
   }
-  await store.write(LINKS_KEY, links);
-  return sources.length;
+  if (linked) await store.write(LINKS_KEY, links);
+  return cards.length;
 }
 
 // One-way sync: edits to a source card propagate to its spec copies. There are

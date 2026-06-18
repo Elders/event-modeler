@@ -28,21 +28,13 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
                 ref: { type: 'string', description: 'Unique id used by links and specs.' },
                 type: {
                   type: 'string',
-                  enum: [
-                    'event',
-                    'command',
-                    'readModel',
-                    'externalEvent',
-                    'error',
-                    'automation',
-                    'screen',
-                  ],
+                  enum: ['event', 'command', 'readModel', 'externalEvent', 'automation', 'screen'],
                 },
                 label: { type: 'string' },
                 lane: {
                   type: 'integer',
                   enum: [-1, 0, 1],
-                  description: '-1 screens, 0 commands & read models, 1 events.',
+                  description: '-1 screens & automations (actors), 0 commands & read models, 1 events.',
                 },
                 column: {
                   type: 'integer',
@@ -51,7 +43,7 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
                 fields: {
                   type: 'array',
                   description:
-                    'Data this block carries. Add fields to data-bearing blocks (command, event, readModel, screen, automation); use [] for errors and any block with no data.',
+                    'Data this block carries. Add fields to data-bearing blocks (command, event, readModel, screen, automation); use [] for any block with no data.',
                   items: {
                     type: 'object',
                     additionalProperties: false,
@@ -97,9 +89,15 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
           title: { type: 'string' },
           given: { type: 'array', items: { type: 'string' }, description: 'sticky refs' },
           when: { type: 'array', items: { type: 'string' }, description: 'sticky refs' },
-          then: { type: 'array', items: { type: 'string' }, description: 'sticky refs' },
+          then: { type: 'array', items: { type: 'string' }, description: 'sticky refs (events)' },
+          errors: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Failure outcomes for this spec, as short labels (e.g. "Payment declined"). Shown as red error stickies in the Then zone. Errors live ONLY here — never as a timeline block, never a link endpoint. Use [] for a success spec.',
+          },
         },
-        required: ['slice', 'title', 'given', 'when', 'then'],
+        required: ['slice', 'title', 'given', 'when', 'then', 'errors'],
       },
     },
   },
@@ -109,19 +107,20 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
 export const SYSTEM_PROMPT = `You are an event-modeling expert. Turn the user's description of a system or workflow into an event model and return it as JSON matching the provided schema.
 
 Event modeling lays information flow on a left-to-right timeline, in three horizontal lanes:
-- lane -1 (top): screens — a UI the user sees or acts on.
-- lane 0 (middle): commands (an intent to change state), read models (data prepared for a user to read), and automations (a process that reacts to state and issues commands).
-- lane 1 (bottom): events (a fact that happened — the backbone of the model), external events (a fact from an outside system), and errors (a rejected outcome).
+- lane -1 (top): actors — screens (a UI the user sees or acts on) and automations (a process that reacts to state and issues commands, with no user). Both drive the model from the top.
+- lane 0 (middle): commands (an intent to change state) and read models (data prepared for a user to read).
+- lane 1 (bottom): events (a fact that happened — the backbone of the model) and external events (a fact from an outside system).
 
 The block types and their meaning:
 - event: something that happened, past tense (e.g. "Order placed").
 - command: an intent to change state, imperative (e.g. "Place order").
 - readModel: data shown to a user or system (e.g. "Order summary").
 - externalEvent: a fact arriving from an outside system.
-- error: a rejected or failed outcome.
 - automation: reacts to state and issues commands (no user involved).
 - screen: a UI surface.
-Use the whole vocabulary where the description calls for it — screens for UI, automations for reactions the system performs on its own, external events for facts from other systems, errors for rejected outcomes — not just commands and events.
+Use the whole vocabulary where the description calls for it — screens for UI, automations for reactions the system performs on its own, external events for facts from other systems — not just commands and events.
+
+Errors are NOT timeline blocks. A failure outcome (e.g. "Payment declined") is never a block in a slice and never has an arrow — it belongs only in a specification, listed in that spec's "errors" field (see below).
 
 A slice is one atomic feature — usually a single step of the flow: a screen (top) → command (middle) → event (bottom), or an event (bottom) → read model (middle) → screen (top). Each slice contains exactly one command or one read model — that single middle block is the spine of the slice; when the flow reaches another command or read model, start a new slice. Break the description into a sequence of slices ordered along the timeline. Most slices are one column; give a block a higher "column" only when a slice genuinely has multiple steps.
 
@@ -132,14 +131,14 @@ Patterns — most slices follow one of four shapes; use whichever fits:
 - translation: external event → automation → event (an outside fact becomes an internal one).
 
 Fields — the data each block carries:
-- Give every data-bearing block (command, event, readModel, screen, automation) a "fields" list; each field has a "name" and a "type" (string, number, date, time, datetime, or uuid). Errors carry no data; use an empty list ([]) for them and for any block with no data.
+- Give every data-bearing block (command, event, readModel, screen, automation) a "fields" list; each field has a "name" and a "type" (string, number, date, time, datetime, or uuid). Use an empty list ([]) for a block with no data.
 - Information flows along the arrows: a field a block holds must come from a block pointing into it, and a field keeps the SAME name and type everywhere it travels (an "orderId : uuid" on a command stays "orderId : uuid" on the event it produces). The board runs an information-completeness check — if a block declares a field that no block pointing into it provides (matched by name and type), the arrow into that block turns red. So introduce each field where it originates and carry it forward unchanged, so the generated model comes out complete (no red arrows).
 
 Guidance:
 - Give every slice and block a short, unique "ref" (e.g. "place-order", "order-placed-evt"). Links and specs reference blocks by these refs.
 - Set each block's "lane" by its type using the rules above; set "column" to order steps within a slice (start at 0).
 - Add links that follow the flow (the patterns above): screen→command→event, event→readModel→screen, readModel→automation→command, externalEvent→automation→event. Link by ref; only link blocks that exist.
-- Write 1–3 specifications for the most important slices. Given = the prior facts/state (events or read models) that must hold; When = the command (or external event) that triggers it; Then = the resulting event(s), or an error sticky for a failing case. Every ref in a spec's given/when/then MUST be a sticky block (event, command, readModel, externalEvent, or error) you defined in some slice — never a screen, an automation, or a slice ref.
+- Write 1–3 specifications for the most important slices. Given = the prior facts/state (events or read models) that must hold; When = the command (or external event) that triggers it; Then = the resulting event(s) for a success case. Every ref in a spec's given/when/then MUST be a sticky block (event, command, readModel, or externalEvent) you defined in some slice — never a screen, an automation, or a slice ref. For a FAILING case, leave "then" for the events and put the failure outcome(s) in the spec's "errors" list (short labels) — these become red error stickies inside the spec, and are the only place errors appear.
 - Keep it focused: prefer a clear, correct model of the core flow over exhaustively enumerating every edge case. Aim for roughly 3–8 slices unless the description clearly calls for more.
 
 Return only the JSON.`;

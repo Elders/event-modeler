@@ -29,7 +29,7 @@ export class AnthropicPlanner implements Planner {
     return readSettings().apiKey.trim().length > 0;
   }
 
-  async plan(text: string): Promise<ModelPlan> {
+  async plan(text: string, signal?: AbortSignal): Promise<ModelPlan> {
     const trimmed = text.trim();
     if (!trimmed) throw new Error('Paste some text to model first.');
 
@@ -42,14 +42,17 @@ export class AnthropicPlanner implements Planner {
 
     let message: Anthropic.Message;
     try {
-      message = await client.messages.create({
-        model,
-        max_tokens: 16000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: trimmed }],
-        output_config: { format: { type: 'json_schema', schema: PLAN_SCHEMA } },
-        ...(supportsAdaptiveThinking(model) ? { thinking: { type: 'adaptive' as const } } : {}),
-      });
+      message = await client.messages.create(
+        {
+          model,
+          max_tokens: 16000,
+          system: SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: trimmed }],
+          output_config: { format: { type: 'json_schema', schema: PLAN_SCHEMA } },
+          ...(supportsAdaptiveThinking(model) ? { thinking: { type: 'adaptive' as const } } : {}),
+        },
+        { signal },
+      );
     } catch (error) {
       throw new Error(describeError(error));
     }

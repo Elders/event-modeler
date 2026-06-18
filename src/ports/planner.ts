@@ -22,8 +22,9 @@ export interface PlannerSettings {
 
 export interface Planner {
   // Produce a model plan from prose. Throws with a user-facing message if the
-  // planner is not configured or the request fails.
-  plan(text: string): Promise<ModelPlan>;
+  // planner is not configured or the request fails. An optional AbortSignal
+  // cancels the in-flight request (the generation feature aborts it on Stop).
+  plan(text: string, signal?: AbortSignal): Promise<ModelPlan>;
 
   // The models the user may choose between.
   models(): PlannerModel[];

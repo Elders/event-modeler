@@ -180,7 +180,9 @@ export interface Canvas {
 
   // Hint that a burst of writes is coming (model generation); the adapter may
   // pace them to stay under a host rate limit. A no-op where there is no limit.
-  setBulkMode(on: boolean): void;
+  // An optional signal lets the adapter drop pacing the moment the run aborts,
+  // so a Pause isn't drawn out by the remaining gaps.
+  setBulkMode(on: boolean, signal?: AbortSignal): void;
 
   // Selection and references.
   deselect(): Promise<void>;

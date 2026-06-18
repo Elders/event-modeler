@@ -8,34 +8,38 @@
 // doesn't reference real blocks so the build step can assume well-formed data.
 
 import type { FieldType } from './fields';
+import type { FieldRecord } from './records';
 import { STICKY_LABEL, type BlockType, type StickyBlockType } from './vocabulary';
 
 // Every block a plan may place — the full vocabulary minus 'slice', since slices
 // are the containers blocks live in, not blocks themselves.
 export type PlannableBlockType = Exclude<BlockType, 'slice'>;
 
+// 'error' is intentionally absent: errors are never timeline blocks — they
+// belong only in a specification's Then zone (see PlannedSpec.errors). Any error
+// block a planner emits anyway is dropped here.
 const PLANNABLE_TYPES: PlannableBlockType[] = [
   'event',
   'command',
   'readModel',
   'externalEvent',
-  'error',
   'automation',
   'screen',
 ];
 
 const STICKY_TYPES: StickyBlockType[] = ['event', 'command', 'readModel', 'externalEvent', 'error'];
 
-// The three conventional lanes, top to bottom: screens (-1),
-// commands & read models (0), events (1).
+// The three conventional lanes, top to bottom: actors — screens and automations
+// (-1), commands & read models (0), events (1).
 export type PlanLane = -1 | 0 | 1;
 
 // The lane a block conventionally sits in, used when a plan omits or mis-tags it.
+// Automations are actors (like screens), so they sit in the top lane.
 const DEFAULT_LANE: Record<PlannableBlockType, PlanLane> = {
   screen: -1,
   command: 0,
   readModel: 0,
-  automation: 0,
+  automation: -1,
   event: 1,
   externalEvent: 1,
   error: 1,
@@ -68,13 +72,16 @@ export interface PlannedSlice {
 }
 
 // A Given/When/Then specification attached to a slice. Each zone lists the refs
-// of the (sticky) blocks whose linked copies populate it.
+// of the (sticky) blocks whose linked copies populate it; `errors` lists failure
+// outcomes as plain labels, rendered as red error stickies in the Then zone (the
+// only place errors appear — never as a timeline block).
 export interface PlannedSpec {
   slice: string;
   title: string;
   given: string[];
   when: string[];
   then: string[];
+  errors: string[];
 }
 
 export interface PlannedLink {
@@ -86,6 +93,30 @@ export interface ModelPlan {
   slices: PlannedSlice[];
   links: PlannedLink[];
   specs: PlannedSpec[];
+}
+
+// A persisted snapshot of an in-progress generation, so a build interrupted by
+// the user (Stop) or by a failure (e.g. an exhausted rate-limit retry) can
+// resume where it stopped instead of starting over. Stored in the document via
+// the Store port, so it survives a panel close or a board reload.
+export interface GenerationCheckpoint {
+  // The prose, kept so a generation cancelled *during planning* can re-ask.
+  text: string;
+  // The layout center captured on the first run; reused on resume so the
+  // remaining elements line up with the ones already placed (viewportCenter can
+  // differ between runs).
+  origin: { x: number; y: number };
+  // null only while still planning (no plan obtained yet).
+  plan: ModelPlan | null;
+  // slice ref AND block ref -> created element id, for wiring links/specs on resume.
+  refToId: Record<string, string>;
+  // The resume cursor. `slice` is the slice being built; `block` is how many of
+  // its blocks are done (so Stop mid-slice resumes block-by-block, no duplicates);
+  // `links`/`specs` count completed units of those phases.
+  progress: { slice: number; block: number; links: number; specs: number };
+  // Field records for the in-progress slice, flushed to the FIELDS registry once
+  // the slice completes — kept here so a mid-slice Stop doesn't lose them.
+  pendingFields: FieldRecord[];
 }
 
 // --- Normalization -------------------------------------------------------
@@ -190,8 +221,11 @@ export function normalizePlan(raw: unknown): ModelPlan {
     const given = keepStickies(sp.given);
     const when = keepStickies(sp.when);
     const then = keepStickies(sp.then);
-    if (given.length + when.length + then.length === 0) continue;
-    specs.push({ slice, title: asString(sp.title), given, when, then });
+    const errors = asArray(sp.errors)
+      .map(asString)
+      .filter((label) => label.length > 0);
+    if (given.length + when.length + then.length + errors.length === 0) continue;
+    specs.push({ slice, title: asString(sp.title), given, when, then, errors });
   }
 
   return { slices, links, specs };
