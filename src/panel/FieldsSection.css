@@ -1,0 +1,65 @@
+/* The Fields editor: a column of field rows (name + type, plus a custom-type
+   input when the type is "custom") and an add button. */
+
+.fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-input {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--em-ink);
+  background: #fff;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #4262ff;
+}
+
+.field-name {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.field-type {
+  flex: 0 0 auto;
+}
+
+.field-custom {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.field-remove {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--em-hint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.field-remove:hover {
+  color: var(--em-error);
+  background: var(--em-line);
+}

@@ -8,6 +8,7 @@
 // another adapter set is all it takes to host the tool on a different canvas.
 
 import { createMiroServices } from './adapters/miro';
+import { fieldsHousekeeping } from './features/fields/housekeeping';
 import { handleSpecSelection } from './features/specs/selection';
 import { specHousekeeping } from './features/specs/housekeeping';
 import { configureServices, services } from './services';
@@ -27,5 +28,8 @@ runtime.onSelectionChange((items) => void handleSpecSelection(items));
 // The housekeeping interval is guarded so HMR re-evaluation can't stack timers.
 if (!window.__emHousekeepingRegistered) {
   window.__emHousekeepingRegistered = true;
-  setInterval(() => void specHousekeeping(), 4000);
+  setInterval(() => {
+    void specHousekeeping();
+    void fieldsHousekeeping();
+  }, 4000);
 }
