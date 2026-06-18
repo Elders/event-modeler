@@ -8,6 +8,7 @@
 import type { ElementMeta } from '../../domain/meta';
 import type {
   Canvas,
+  CanvasConnector,
   CanvasElement,
   CardSpec,
   ContainerSpec,
@@ -251,6 +252,24 @@ export class MiroCanvas implements Canvas {
     return children.map((child) => this.snap(child));
   }
 
+  async connectors(): Promise<CanvasConnector[]> {
+    const items = this.cacheAll(await miro.board.get({ type: 'connector' }));
+    return items.map((item) => {
+      const c = item as unknown as {
+        id: string;
+        start?: { item?: string };
+        end?: { item?: string };
+        style?: { strokeColor?: string };
+      };
+      return {
+        id: c.id,
+        start: c.start?.item ?? null,
+        end: c.end?.item ?? null,
+        color: typeof c.style?.strokeColor === 'string' ? c.style.strokeColor : null,
+      };
+    });
+  }
+
   async selection(): Promise<CanvasElement[]> {
     const items = this.cacheAll(await miro.board.getSelection());
     return items.map((item) => this.snap(item));
@@ -323,6 +342,16 @@ export class MiroCanvas implements Canvas {
     } catch (error) {
       console.warn('Could not remove an element', error);
     }
+  }
+
+  async setConnectorColor(id: string, color: string): Promise<void> {
+    await this.ensureLive([id]);
+    const connector = this.items.get(id) as unknown as
+      | { style?: { strokeColor?: string }; sync?: () => Promise<unknown> }
+      | undefined;
+    if (!connector?.style || !connector.sync) return;
+    connector.style.strokeColor = color;
+    await withRetry(() => connector.sync!());
   }
 
   async setMeta(id: string, meta: ElementMeta): Promise<void> {

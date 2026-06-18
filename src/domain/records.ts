@@ -31,10 +31,16 @@ export type FieldRecord = {
   card?: string | null;
 };
 
+// A connector the completeness check has reddened, with the stroke color it had
+// beforehand so it can be restored exactly once the gap is closed (connectors
+// otherwise use the canvas default style).
+export type ConnectorFlag = { connector: string; original: string };
+
 export const SPECS_KEY = 'em-specs';
 export const SLICES_KEY = 'em-slices';
 export const LINKS_KEY = 'em-links';
 export const FIELDS_KEY = 'em-fields';
+export const FLAGS_KEY = 'em-flags';
 
 // Earlier versions stored plain container-id strings; normalize them to
 // records so data written by older versions stays readable.

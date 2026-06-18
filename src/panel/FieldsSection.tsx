@@ -111,7 +111,8 @@ export function FieldsSection() {
       <section className="section">
         <h2 className="section-title">Fields</h2>
         <p className="section-sub">
-          Select a command, event, read model, screen, or automation to define its fields.
+          Select a command, event, read model, external event, screen, or automation to define
+          its fields.
         </p>
       </section>
     );

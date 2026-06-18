@@ -8,6 +8,7 @@
 // another adapter set is all it takes to host the tool on a different canvas.
 
 import { createMiroServices } from './adapters/miro';
+import { completenessHousekeeping } from './features/completeness';
 import { fieldsHousekeeping } from './features/fields/housekeeping';
 import { handleSpecSelection } from './features/specs/selection';
 import { specHousekeeping } from './features/specs/housekeeping';
@@ -31,5 +32,6 @@ if (!window.__emHousekeepingRegistered) {
   setInterval(() => {
     void specHousekeeping();
     void fieldsHousekeeping();
+    void completenessHousekeeping();
   }, 4000);
 }

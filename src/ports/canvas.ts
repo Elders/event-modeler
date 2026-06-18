@@ -21,6 +21,16 @@ export type ElementKind =
   | 'connector'
   | 'unknown';
 
+// An immutable snapshot of one connector (arrow). Endpoints are the ids of the
+// items the connector attaches to, or null when an end floats free; color is
+// the current stroke color (the canvas default when never overridden).
+export interface CanvasConnector {
+  id: string;
+  start: string | null;
+  end: string | null;
+  color: string | null;
+}
+
 // An immutable snapshot of one element on the canvas.
 export interface CanvasElement {
   id: string;
@@ -115,6 +125,7 @@ export interface Canvas {
   get(ids: string[]): Promise<CanvasElement[]>;
   containers(): Promise<CanvasElement[]>;
   childrenOf(containerId: string): Promise<CanvasElement[]>;
+  connectors(): Promise<CanvasConnector[]>;
   selection(): Promise<CanvasElement[]>;
 
   // Mutations.
@@ -122,6 +133,9 @@ export interface Canvas {
   addToContainer(containerId: string, childId: string, relX: number, relY: number): Promise<void>;
   group(ids: string[]): Promise<void>;
   remove(id: string): Promise<void>;
+  // Sets a connector's stroke color (used by the completeness check to flag and
+  // restore arrows). Connectors otherwise carry no app style overrides.
+  setConnectorColor(id: string, color: string): Promise<void>;
 
   // Metadata.
   setMeta(id: string, meta: ElementMeta): Promise<void>;

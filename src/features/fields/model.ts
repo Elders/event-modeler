@@ -15,12 +15,12 @@ import { services } from '../../services';
 // image-based blocks (screens, automations) get an attached box beneath them.
 export type FieldDisplayMode = 'text' | 'box';
 
-const TEXT_TYPES: BlockType[] = ['command', 'event', 'readModel'];
+const TEXT_TYPES: BlockType[] = ['command', 'event', 'readModel', 'externalEvent'];
 const BOX_TYPES: BlockType[] = ['screen', 'automation'];
 const FIELDABLE: BlockType[] = [...TEXT_TYPES, ...BOX_TYPES];
 
-// True for the blocks that can carry fields (external events and errors can't,
-// by product decision). Narrows the loose meta type union down to BlockType.
+// True for the blocks that can carry fields (errors can't, by product
+// decision). Narrows the loose meta type union down to BlockType.
 export function isFieldable(type: string | null | undefined): type is BlockType {
   return !!type && (FIELDABLE as string[]).includes(type);
 }
