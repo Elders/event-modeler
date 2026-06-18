@@ -156,14 +156,22 @@ export async function handleSpecSelection(items: SelectionItem[]): Promise<void>
       return;
     }
     if (meta && meta.type === 'slice-add-spec') {
+      const [slice] = await canvas.get([meta.slice]);
+      if (!slice || slice.kind !== 'container') {
+        // The slice was deleted, but its add-spec button can briefly survive the
+        // frame deletion and end up selected. Don't spawn a standalone spec at
+        // the view center — just drop the orphaned button (housekeeping would
+        // reap it too, but doing it now avoids a stray click re-triggering this).
+        await canvas.remove(items[0].id);
+        return;
+      }
       ignoreNextEmptySelection = true;
       try {
         await canvas.deselect();
       } catch {
         ignoreNextEmptySelection = false;
       }
-      const [slice] = await canvas.get([meta.slice]);
-      await createSpecification(slice && slice.kind === 'container' ? slice : null);
+      await createSpecification(slice);
       await notifier.info('Specification added inside the slice.');
       return;
     }

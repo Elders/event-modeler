@@ -46,6 +46,23 @@ export const STICKY_LABEL: Record<StickyBlockType, string> = {
   error: 'Error',
 };
 
+// The reverse of STICKY_COLORS: the block type a sticky's fill color denotes.
+// Used to adopt a plain sticky note (one the user drew with the host's own tool,
+// carrying no tool metadata) as the matching typed block.
+const STICKY_TYPE_BY_COLOR: Record<string, StickyBlockType> = Object.fromEntries(
+  (Object.entries(STICKY_COLORS) as [StickyBlockType, CardColor][]).map(([type, color]) => [
+    color,
+    type,
+  ]),
+);
+
+// The block type for a sticky's fill color, or null when the color isn't one of
+// the conventional event-modeling colors (e.g. gray, violet — no model meaning).
+export function stickyTypeForColor(color: string | null | undefined): StickyBlockType | null {
+  if (!color) return null;
+  return STICKY_TYPE_BY_COLOR[color] ?? null;
+}
+
 export interface BlockDef {
   type: BlockType;
   label: string;

@@ -34,25 +34,32 @@ export async function createSlice(
   y: number,
   opts: SliceOptions = {},
 ): Promise<CanvasElement> {
-  const { canvas, store } = services();
-  const width = opts.width ?? SLICE_WIDTH;
-  const height = opts.height ?? SLICE_HEIGHT;
+  const { canvas } = services();
   const frame = await canvas.createContainer({
     title: opts.title ?? 'Slice',
     x,
     y,
-    width,
-    height,
+    width: opts.width ?? SLICE_WIDTH,
+    height: opts.height ?? SLICE_HEIGHT,
     fill: 'transparent',
   });
-  // On-canvas "add specification" button at the slice's bottom-center —
-  // selecting it places a new spec inside this slice, growing the slice to fit.
+  await adoptSliceFrame(frame);
+  return frame;
+}
+
+// Attaches the on-canvas "add specification" button at a frame's bottom-center
+// — selecting it places a new spec inside, growing the slice to fit — and
+// registers the frame as a slice. Shared by createSlice (a fresh frame) and by
+// adopting a plain frame the user drew. A failure here leaves the frame intact
+// but unregistered, so it is logged rather than thrown.
+export async function adoptSliceFrame(frame: CanvasElement): Promise<void> {
+  const { canvas, store } = services();
   try {
-    const offset = sliceButtonOffset(width, height);
+    const offset = sliceButtonOffset(frame.width, frame.height);
     const button = await canvas.createImage({
       url: PLUS_ICON_URL,
-      x,
-      y: y + height / 2 - SLICE_BUTTON_INSET,
+      x: frame.x,
+      y: frame.y + frame.height / 2 - SLICE_BUTTON_INSET,
       width: SPEC_ADD_SIZE,
     });
     await canvas.setMeta(button.id, { type: 'slice-add-spec', slice: frame.id });
@@ -60,12 +67,11 @@ export async function createSlice(
     const records = await readSliceRecords();
     await store.write(SLICES_KEY, [
       ...records,
-      { frame: frame.id, labels: [button.id], width, height },
+      { frame: frame.id, labels: [button.id], width: frame.width, height: frame.height },
     ]);
   } catch (error) {
     console.warn('Could not attach the add-spec button to the slice', error);
   }
-  return frame;
 }
 
 // Draws a slice around the current selection, padded on all sides, and adopts

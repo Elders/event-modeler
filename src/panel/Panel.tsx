@@ -4,6 +4,7 @@
 import './Panel.css';
 import { useState } from 'react';
 import { BuildingBlocksSection } from './BuildingBlocksSection';
+import { ConvertSection } from './ConvertSection';
 import { FieldsSection } from './FieldsSection';
 import { GenerateSection } from './GenerateSection';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
@@ -22,6 +23,7 @@ export function Panel() {
           <>
             <BuildingBlocksSection guard={guard} />
             <PatternsSection busy={busy} guard={guard} />
+            <ConvertSection busy={busy} guard={guard} />
           </>
         ) : tab === 'fields' ? (
           <FieldsSection />

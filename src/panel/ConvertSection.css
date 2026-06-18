@@ -1,0 +1,31 @@
+/* The Convert section: a stack of contextual actions — one full-width button
+   for plain stickies, and a labelled pair of equal-width buttons for plain
+   frames. */
+
+.convert-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.convert-frames {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.convert-frames-label {
+  margin: 0;
+  font-size: 11px;
+  color: var(--em-hint);
+}
+
+.convert-frame-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.convert-frame-buttons .button {
+  flex: 1 1 0;
+  margin: 0;
+}

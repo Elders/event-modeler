@@ -21,7 +21,75 @@ import {
   zoneExtent,
   zoneLabelOffset,
   zonePlusOffset,
+  type ZoneHeights,
 } from './model';
+
+// Lays out the per-zone chrome (Given/When/Then label + "+" button) inside a
+// spec frame and returns the chrome ids for the registry. The six children are
+// independent, so they're created in parallel — every awaited round-trip adds
+// up, and the sequential version took over a second to render a spec. Each
+// child is created at its absolute position (right even if re-parenting fails),
+// then re-pinned relative to the frame. Shared by spec creation and by adopting
+// a plain frame as a spec.
+async function createSpecChrome(
+  frameId: string,
+  frameLeft: number,
+  frameTop: number,
+  zones: ZoneHeights,
+): Promise<string[]> {
+  const { canvas } = services();
+  return Promise.all(
+    SPEC_ZONES.flatMap((zone) => {
+      const { top } = zoneExtent(zones, zone.id);
+      const plusOffset = zonePlusOffset(top);
+      const labelOffset = zoneLabelOffset(top);
+      const makePlus = async () => {
+        const plus = await canvas.createImage({
+          url: PLUS_ICON_URL,
+          x: frameLeft + plusOffset.x,
+          y: frameTop + plusOffset.y,
+          width: SPEC_ADD_SIZE,
+        });
+        await canvas.setMeta(plus.id, { type: 'spec-add', zone: zone.id, spec: frameId });
+        await canvas.addToContainer(frameId, plus.id, plusOffset.x, plusOffset.y);
+        return plus.id;
+      };
+      const makeLabel = async () => {
+        const label = await canvas.createText({
+          content: zone.label,
+          x: frameLeft + labelOffset.x,
+          y: frameTop + labelOffset.y,
+          width: 120,
+          color: '#9c9cac',
+          fontSize: 14,
+          align: 'left',
+        });
+        await canvas.addToContainer(frameId, label.id, labelOffset.x, labelOffset.y);
+        return label.id;
+      };
+      return [makePlus(), makeLabel()];
+    }),
+  );
+}
+
+// Adopts a plain frame the user drew as a specification: normalizes it to the
+// standard spec geometry (white fill, default size and zones) so it behaves
+// exactly like a created spec, lays out the chrome, and registers it. The
+// frame keeps its own title.
+export async function adoptFrameAsSpec(frame: CanvasElement): Promise<void> {
+  const { canvas, store } = services();
+  const width = SPEC_WIDTH;
+  const height = specFrameHeight(DEFAULT_ZONE_HEIGHTS);
+  await canvas.apply([{ id: frame.id, width, height, color: '#ffffff' }]);
+  const frameLeft = frame.x - width / 2;
+  const frameTop = frame.y - height / 2;
+  const chromeIds = await createSpecChrome(frame.id, frameLeft, frameTop, DEFAULT_ZONE_HEIGHTS);
+  const specRecords = await readSpecRecords();
+  await store.write(SPECS_KEY, [
+    ...specRecords,
+    { frame: frame.id, labels: chromeIds, zones: { ...DEFAULT_ZONE_HEIGHTS }, width },
+  ]);
+}
 
 export async function addSpecification(): Promise<CanvasElement> {
   const { canvas } = services();
@@ -91,42 +159,7 @@ export async function createSpecification(
 
   const frameTop = y - height / 2;
   const frameLeft = x - SPEC_WIDTH / 2;
-  // The six zone children are independent, so they're created in parallel —
-  // every awaited round-trip adds up, and the sequential version took over a
-  // second to render a spec. Each child is created at its absolute position
-  // (right even if re-parenting fails), then re-pinned relative to the frame.
-  const chromeIds = await Promise.all(
-    SPEC_ZONES.flatMap((zone) => {
-      const { top } = zoneExtent(DEFAULT_ZONE_HEIGHTS, zone.id);
-      const plusOffset = zonePlusOffset(top);
-      const labelOffset = zoneLabelOffset(top);
-      const makePlus = async () => {
-        const plus = await canvas.createImage({
-          url: PLUS_ICON_URL,
-          x: frameLeft + plusOffset.x,
-          y: frameTop + plusOffset.y,
-          width: SPEC_ADD_SIZE,
-        });
-        await canvas.setMeta(plus.id, { type: 'spec-add', zone: zone.id, spec: frame.id });
-        await canvas.addToContainer(frame.id, plus.id, plusOffset.x, plusOffset.y);
-        return plus.id;
-      };
-      const makeLabel = async () => {
-        const label = await canvas.createText({
-          content: zone.label,
-          x: frameLeft + labelOffset.x,
-          y: frameTop + labelOffset.y,
-          width: 120,
-          color: '#9c9cac',
-          fontSize: 14,
-          align: 'left',
-        });
-        await canvas.addToContainer(frame.id, label.id, labelOffset.x, labelOffset.y);
-        return label.id;
-      };
-      return [makePlus(), makeLabel()];
-    }),
-  );
+  const chromeIds = await createSpecChrome(frame.id, frameLeft, frameTop, DEFAULT_ZONE_HEIGHTS);
 
   await store.write(SPECS_KEY, [
     ...specRecords,
