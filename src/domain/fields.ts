@@ -73,22 +73,26 @@ export function renderStickyContent(name: string, fields: Field[]): string {
   return `${head}<p>&nbsp;</p>${lines}`;
 }
 
-// The block name recovered from a sticky's text: the first line.
+// The block name recovered from a sticky's text: the first paragraph. Uses the
+// position-preserving split (not htmlToLines) so an *empty* name stays the name
+// instead of letting the first field line slide into its place.
 export function extractName(content: string | null): string {
-  return htmlToLines(content)[0] ?? '';
+  return htmlToParagraphs(content)[0] ?? '';
 }
 
-// The field lines from a sticky's text: every line after the name.
+// The field lines from a sticky's text: every non-empty paragraph after the
+// name (the blank separator and any stray blank lines are dropped here).
 export function extractFieldLines(content: string | null): string[] {
-  return htmlToLines(content).slice(1);
+  return htmlToParagraphs(content).slice(1).filter((line) => line.length > 0);
 }
 
 // Parses a sticky's text back into fields — the inbound direction of editing,
-// so a user can type "name : type" lines directly on the block. The first line
-// is the name; each following line is one field. Existing ids are reused by
-// name so reconciling doesn't churn React keys or rewrite unchanged rows.
+// so a user can type "name : type" lines directly on the block. The first
+// paragraph is the name (possibly empty); each following non-empty line is one
+// field. Existing ids are reused by name so reconciling doesn't churn React keys
+// or rewrite unchanged rows.
 export function parseStickyFields(content: string | null, existing: Field[] = []): Field[] {
-  const lines = htmlToLines(content).slice(1);
+  const lines = htmlToParagraphs(content).slice(1).filter((line) => line.length > 0);
   const pool = [...existing];
   return lines.map((line) => {
     const field = parseFieldLine(line);
@@ -144,6 +148,16 @@ export function htmlToLines(content: string | null): string[] {
     .split(/<\/p>|<br\s*\/?>/i)
     .map((chunk) => stripHtml(chunk))
     .filter((line) => line.length > 0);
+}
+
+// Like htmlToLines but keeps empty paragraphs, so the *position* of the name
+// line survives. The sticky format is "name, [blank separator,] fields" and the
+// name may be empty; if empties were dropped, an empty name would let the first
+// field line slide into the name slot and render a stray ": string". Callers
+// take paragraph[0] as the name and filter empties out of the remaining lines.
+export function htmlToParagraphs(content: string | null): string[] {
+  if (!content) return [];
+  return content.split(/<\/p>|<br\s*\/?>/i).map((chunk) => stripHtml(chunk));
 }
 
 function stripHtml(html: string): string {

@@ -4,8 +4,9 @@
 // fields); a plain frame becomes a slice or a specification. Every operation
 // works across the whole selection at once.
 
+import { extractName } from '../domain/fields';
 import { LINKS_KEY, type SpecLink } from '../domain/records';
-import { stickyTypeForColor } from '../domain/vocabulary';
+import { STICKY_LABEL, stickyTypeForColor } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
 import { adoptSliceFrame, readSliceRecords } from './slices';
@@ -61,13 +62,19 @@ async function convertibleFrames(selection: CanvasElement[]): Promise<CanvasElem
 }
 
 // Tags each plain sticky with the block type its color denotes; its existing
-// text becomes the block name, so nothing the user wrote is lost.
+// text becomes the block name, so nothing the user wrote is lost. An empty
+// sticky gets the block's default name (Event, Command, …) instead of being
+// left blank.
 export async function convertStickies(): Promise<number> {
   const { canvas, notifier } = services();
   const targets = await convertibleStickies(await canvas.selection());
   for (const card of targets) {
     const type = stickyTypeForColor(card.color);
-    if (type) await canvas.setMeta(card.id, { type });
+    if (!type) continue;
+    await canvas.setMeta(card.id, { type });
+    if (extractName(card.content) === '') {
+      await canvas.apply([{ id: card.id, content: STICKY_LABEL[type] }]);
+    }
   }
   if (targets.length > 0) {
     const noun = targets.length === 1 ? 'sticky note' : 'sticky notes';
