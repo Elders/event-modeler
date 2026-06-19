@@ -22,10 +22,11 @@ import { connect } from './connectors';
 import { createBlock } from './createBlock';
 import { clearCheckpoint, loadCheckpoint, saveCheckpoint } from './generateCheckpoint';
 import {
-  FIELDS_KEY,
+  displayMode,
   isFieldable,
   newFieldId,
   readFieldRecords,
+  writeFieldRecords,
   type FieldRecord,
 } from './fields/model';
 import { renderFields } from './fields/render';
@@ -83,6 +84,7 @@ async function runGeneration(checkpoint: GenerationCheckpoint, signal?: AbortSig
         throw new Error('The AI did not produce any model blocks — try a more detailed description.');
       }
       checkpoint.plan = plan;
+      checkpoint.text = ''; // the prose is only needed to re-plan; the plan supersedes it
       await saveCheckpoint(checkpoint);
     }
     if (aborted(signal)) return; // stopped right after planning — resume picks up the build
@@ -143,8 +145,9 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
         await canvas.addToContainer(frame.id, element.id, x - frameLeft, y - frameTop);
       }
       // Attach any planned fields (text on stickies, a box on screens/automations).
-      // The record rides on the checkpoint until the slice completes, so a Stop
-      // here doesn't strand it.
+      // Stickies store their fields in the text alone; only box-mode blocks keep a
+      // record (it rides on the checkpoint until the slice completes, so a Stop
+      // here doesn't strand it).
       if (block.fields.length > 0 && isFieldable(block.type)) {
         const record: FieldRecord = {
           element: element.id,
@@ -157,7 +160,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
           card: null,
         };
         await renderFields(record, element);
-        checkpoint.pendingFields.push(record);
+        if (displayMode(block.type) === 'box') checkpoint.pendingFields.push(record);
       }
       checkpoint.refToId[block.ref] = element.id;
       blocks.set(block.ref, element);
@@ -168,7 +171,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
     // Slice complete: flush its field records (one write per slice), advance.
     if (checkpoint.pendingFields.length > 0) {
       const existing = await readFieldRecords();
-      await services().store.write(FIELDS_KEY, [...existing, ...checkpoint.pendingFields]);
+      await writeFieldRecords([...existing, ...checkpoint.pendingFields]);
       checkpoint.pendingFields = [];
     }
     checkpoint.progress = { ...checkpoint.progress, slice: i + 1, block: 0 };

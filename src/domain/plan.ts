@@ -100,8 +100,13 @@ export interface ModelPlan {
 // resume where it stopped instead of starting over. Stored in the document via
 // the Store port, so it survives a panel close or a board reload.
 export interface GenerationCheckpoint {
-  // The prose, kept so a generation cancelled *during planning* can re-ask.
+  // The prose, needed only to re-ask if a generation is cancelled *during
+  // planning*; cleared to '' once a plan exists, so a parked checkpoint doesn't
+  // hold the (potentially large) input text against the board's app-data budget.
   text: string;
+  // When the checkpoint was last saved (epoch ms). Lets a stale checkpoint from
+  // an abandoned generation be expired instead of occupying app-data forever.
+  savedAt?: number;
   // The layout center captured on the first run; reused on resume so the
   // remaining elements line up with the ones already placed (viewportCenter can
   // differ between runs).

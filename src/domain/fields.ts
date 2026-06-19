@@ -25,11 +25,13 @@ export const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: 'custom', label: 'Custom…' },
 ];
 
-// A field cleaned for the document store: `customType` is kept only for the
-// custom type (always as a string), never left `undefined`. The Miro app-data
-// store rejects `undefined` members, so this runs before every write.
-export function storableField(field: Field): Field {
-  const base = { id: field.id, name: field.name, type: field.type };
+// A field cleaned for the document store. The per-field `id` is NOT persisted —
+// it's only a React key / edit target, regenerated on read (see
+// normalizeFieldRecords) — which keeps the registry small against the tight
+// app-data budget. `customType` is kept only for the custom type (always a
+// string, never `undefined`, which the Miro app-data store rejects).
+export function storableField(field: Field): Omit<Field, 'id'> {
+  const base = { name: field.name, type: field.type };
   return field.type === 'custom' ? { ...base, customType: field.customType ?? '' } : base;
 }
 
@@ -93,6 +95,22 @@ export function extractFieldLines(content: string | null): string[] {
 // or rewrite unchanged rows.
 export function parseStickyFields(content: string | null, existing: Field[] = []): Field[] {
   const lines = htmlToParagraphs(content).slice(1).filter((line) => line.length > 0);
+  return linesToFields(lines, existing);
+}
+
+// Parses the attached box (screens/automations) back into fields — the inbound
+// direction for box-mode blocks, mirroring parseStickyFields for stickies. The
+// box holds only field lines (no name line), so every non-empty paragraph is a
+// field. Lets a box-mode block recover its fields from what's drawn on the board
+// when its registry record was lost.
+export function parseBoxFields(content: string | null, existing: Field[] = []): Field[] {
+  return linesToFields(htmlToLines(content), existing);
+}
+
+// Maps display lines to fields, reusing an existing field's id when the name
+// still matches so a reconcile doesn't churn React keys or rewrite unchanged
+// rows. Shared by the sticky and box parsers.
+function linesToFields(lines: string[], existing: Field[]): Field[] {
   const pool = [...existing];
   return lines.map((line) => {
     const field = parseFieldLine(line);

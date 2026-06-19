@@ -3,7 +3,7 @@
 // to their originals, and which elements carry fields. Pure data shapes plus
 // normalization — the Store port decides where the bytes live.
 
-import type { Field } from './fields';
+import { newFieldId, type Field } from './fields';
 import type { BlockType } from './vocabulary';
 
 // One registry record per tool-managed container (spec or slice): the
@@ -58,10 +58,17 @@ export function normalizeRecords(raw: unknown): FrameRecord[] {
 // their own guard rather than reusing the frame normalizer.
 export function normalizeFieldRecords(raw: unknown): FieldRecord[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (entry): entry is FieldRecord =>
-      !!entry &&
-      typeof (entry as FieldRecord).element === 'string' &&
-      Array.isArray((entry as FieldRecord).fields),
-  );
+  return raw
+    .filter(
+      (entry): entry is FieldRecord =>
+        !!entry &&
+        typeof (entry as FieldRecord).element === 'string' &&
+        Array.isArray((entry as FieldRecord).fields),
+    )
+    .map((record) => ({
+      ...record,
+      // Per-field ids aren't persisted (they're only React keys); restore one for
+      // any field that lacks it so the in-memory shape stays a full Field.
+      fields: record.fields.map((field) => (field.id ? field : { ...field, id: newFieldId() })),
+    }));
 }

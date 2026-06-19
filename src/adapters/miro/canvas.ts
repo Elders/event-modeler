@@ -21,6 +21,7 @@ import type {
   TextSpec,
 } from '../../ports/canvas';
 import { META_KEY } from './meta';
+import { setBulkWrites, withRateLimit } from './rateLimit';
 
 type LiveItem = Awaited<ReturnType<typeof miro.board.get>>[number];
 
@@ -49,67 +50,6 @@ type WriteView = {
   style?: { fillColor?: string; fontSize?: number; textAlign?: string; textAlignVertical?: string };
   sync(): Promise<unknown>;
 };
-
-// Miro rate-limits writes (HTTP 429). A single user action never approaches the
-// limit, but a bulk operation (generating a whole model) can — so every write
-// goes through this backoff. Reads are left alone; the limit bites on creates.
-function isRateLimited(error: unknown): boolean {
-  const status = (error as { status?: number } | null)?.status;
-  if (status === 429) return true;
-  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
-  return message.includes('429') || message.includes('too many requests') || message.includes('rate limit');
-}
-
-// Backoff schedule for rate-limited (429) writes. Generous tail so a bulk
-// operation rides out even a per-minute window and completes, rather than
-// giving up partway. This is the backstop; bulk pacing (below) is the first line.
-const RETRY_DELAYS_MS = [500, 1000, 2000, 4000, 8000, 16000, 30000];
-
-// Proactive pacing for bulk operations (model generation). With bulk mode on,
-// each write reserves a time slot BULK_WRITE_GAP_MS after the previous one, so a
-// burst of creates flows at a steady rate under Miro's limit instead of tripping
-// it. The slot is reserved synchronously, before any await, so even Promise.all'd
-// writes are spaced without a race. Off (gap 0) for normal per-action writes,
-// which never approach the limit.
-const BULK_WRITE_GAP_MS = 500;
-let bulkGapMs = 0;
-let nextWriteSlot = 0;
-// Set when the in-flight bulk operation is aborting (Pause): pacing is dropped so
-// the current unit finishes fast and the build can stop at its next boundary —
-// otherwise Pause would wait out a unit's worth of 500ms gaps (slow on specs).
-let bulkAborting = false;
-
-async function pace(): Promise<void> {
-  if (bulkGapMs <= 0 || bulkAborting) return;
-  const now = Date.now();
-  const slot = Math.max(now, nextWriteSlot);
-  nextWriteSlot = slot + bulkGapMs;
-  const wait = slot - now;
-  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-}
-
-async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
-  await pace();
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (attempt >= RETRY_DELAYS_MS.length || !isRateLimited(error)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-    }
-  }
-}
-
-// Enables/disables the proactive write pacing above. A burst hint, not board
-// state: the headless board script keeps its own module instance, so toggling it
-// in the panel only paces the panel's writes (generation).
-export function setBulkWrites(on: boolean): void {
-  bulkGapMs = on ? BULK_WRITE_GAP_MS : 0;
-  if (on) {
-    nextWriteSlot = Date.now();
-    bulkAborting = false;
-  }
-}
 
 function kindOf(type: string): ElementKind {
   switch (type) {
@@ -148,7 +88,7 @@ export class MiroCanvas implements Canvas {
     const missing = ids.filter((id) => !this.items.has(id));
     if (missing.length === 0) return;
     try {
-      this.cacheAll(await miro.board.get({ id: missing }));
+      this.cacheAll(await withRateLimit(() => miro.board.get({ id: missing })));
     } catch (error) {
       console.warn('Could not fetch board items', error);
     }
@@ -173,7 +113,7 @@ export class MiroCanvas implements Canvas {
   async createCard(spec: CardSpec): Promise<CanvasElement> {
     type Arg = Parameters<typeof miro.board.createStickyNote>[0];
     const sticky = this.cache(
-      await withRetry(() =>
+      await withRateLimit(() =>
         miro.board.createStickyNote({
           x: spec.x,
           y: spec.y,
@@ -190,7 +130,7 @@ export class MiroCanvas implements Canvas {
 
   async createImage(spec: ImageSpec): Promise<CanvasElement> {
     const image = this.cache(
-      await withRetry(() =>
+      await withRateLimit(() =>
         miro.board.createImage({ url: spec.url, x: spec.x, y: spec.y, width: spec.width }),
       ),
     );
@@ -200,7 +140,7 @@ export class MiroCanvas implements Canvas {
   async createText(spec: TextSpec): Promise<CanvasElement> {
     type Arg = Parameters<typeof miro.board.createText>[0];
     const text = this.cache(
-      await withRetry(() =>
+      await withRateLimit(() =>
         miro.board.createText({
           content: spec.content,
           x: spec.x,
@@ -222,7 +162,7 @@ export class MiroCanvas implements Canvas {
     // The live SDK requires `style.fillColor` (the published typings mark it
     // optional) and rejects a `content` property outright.
     const frame = this.cache(
-      await withRetry(() =>
+      await withRateLimit(() =>
         miro.board.createFrame({
           title: spec.title,
           x: spec.x,
@@ -239,7 +179,7 @@ export class MiroCanvas implements Canvas {
   async createShape(spec: ShapeSpec): Promise<CanvasElement> {
     type Arg = Parameters<typeof miro.board.createShape>[0];
     const shape = this.cache(
-      await withRetry(() =>
+      await withRateLimit(() =>
         miro.board.createShape({
           shape: spec.shape,
           x: spec.x,
@@ -266,7 +206,7 @@ export class MiroCanvas implements Canvas {
   async createLink(fromId: string, toId: string): Promise<void> {
     // No shape or style overrides: stamped links use the SDK defaults, so they
     // are indistinguishable from manually drawn ones.
-    await withRetry(() =>
+    await withRateLimit(() =>
       miro.board.createConnector({ start: { item: fromId }, end: { item: toId } }),
     );
   }
@@ -277,7 +217,7 @@ export class MiroCanvas implements Canvas {
     // (so the head matches Miro's default linking arrow) — only color, width and
     // an optional on-line caption are overridden.
     const connector = this.cache(
-      await withRetry(() =>
+      await withRateLimit(() =>
         miro.board.createConnector({
           shape: 'straight',
           start: { position: { x: spec.start.x, y: spec.start.y } },
@@ -299,12 +239,12 @@ export class MiroCanvas implements Canvas {
 
   async get(ids: string[]): Promise<CanvasElement[]> {
     if (ids.length === 0) return [];
-    const items = this.cacheAll(await miro.board.get({ id: ids }));
+    const items = this.cacheAll(await withRateLimit(() => miro.board.get({ id: ids })));
     return items.map((item) => this.snap(item));
   }
 
   async containers(): Promise<CanvasElement[]> {
-    const frames = this.cacheAll(await miro.board.get({ type: 'frame' }));
+    const frames = this.cacheAll(await withRateLimit(() => miro.board.get({ type: 'frame' })));
     return frames.map((frame) => this.snap(frame));
   }
 
@@ -314,12 +254,12 @@ export class MiroCanvas implements Canvas {
       | { getChildren?: () => Promise<LiveItem[]> }
       | undefined;
     if (!frame?.getChildren) return [];
-    const children = this.cacheAll(await frame.getChildren());
+    const children = this.cacheAll(await withRateLimit(() => frame.getChildren!()));
     return children.map((child) => this.snap(child));
   }
 
   async connectors(): Promise<CanvasConnector[]> {
-    const items = this.cacheAll(await miro.board.get({ type: 'connector' }));
+    const items = this.cacheAll(await withRateLimit(() => miro.board.get({ type: 'connector' })));
     return items.map((item) => {
       const c = item as unknown as {
         id: string;
@@ -337,7 +277,7 @@ export class MiroCanvas implements Canvas {
   }
 
   async groups(): Promise<CanvasGroup[]> {
-    const groups = await miro.board.get({ type: 'group' });
+    const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
     return groups.map((group) => {
       const g = group as unknown as { id: string; itemsIds?: string[] };
       return { id: g.id, members: Array.isArray(g.itemsIds) ? g.itemsIds : [] };
@@ -345,7 +285,7 @@ export class MiroCanvas implements Canvas {
   }
 
   async selection(): Promise<CanvasElement[]> {
-    const items = this.cacheAll(await miro.board.getSelection());
+    const items = this.cacheAll(await withRateLimit(() => miro.board.getSelection()));
     return items.map((item) => this.snap(item));
   }
 
@@ -367,7 +307,7 @@ export class MiroCanvas implements Canvas {
       if (patch.textAlign !== undefined && w.style) w.style.textAlign = patch.textAlign;
       if (patch.textAlignVertical !== undefined && w.style)
         w.style.textAlignVertical = patch.textAlignVertical;
-      syncs.push(withRetry(() => w.sync()));
+      syncs.push(withRateLimit(() => w.sync()));
     }
     await Promise.all(syncs);
   }
@@ -385,11 +325,11 @@ export class MiroCanvas implements Canvas {
     const child = this.items.get(childId);
     if (!frame?.add || !child) return;
     try {
-      await withRetry(() => frame.add!(child));
+      await withRateLimit(() => frame.add!(child));
       const w = child as unknown as WriteView;
       w.x = relX;
       w.y = relY;
-      await withRetry(() => w.sync());
+      await withRateLimit(() => w.sync());
     } catch (error) {
       // Re-parenting can fail; the child keeps the absolute position it was
       // created at, so the layout is still right.
@@ -404,12 +344,14 @@ export class MiroCanvas implements Canvas {
     // set). Re-fetch fresh handles afterwards: the ungroup invalidates the
     // cached ones, and grouping stale handles silently no-ops.
     await this.dissolveGroupsOf(ids);
-    const items = this.cacheAll(await miro.board.get({ id: ids }));
+    const items = this.cacheAll(await withRateLimit(() => miro.board.get({ id: ids })));
     if (items.length < 2) return;
     try {
-      await miro.board.group({
-        items: items as unknown as Parameters<typeof miro.board.group>[0]['items'],
-      });
+      await withRateLimit(() =>
+        miro.board.group({
+          items: items as unknown as Parameters<typeof miro.board.group>[0]['items'],
+        }),
+      );
     } catch (error) {
       console.warn('Could not group elements', error);
     }
@@ -421,11 +363,11 @@ export class MiroCanvas implements Canvas {
   private async dissolveGroupsOf(ids: string[]): Promise<void> {
     try {
       const wanted = new Set(ids);
-      const groups = await miro.board.get({ type: 'group' });
+      const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
       for (const group of groups) {
         const g = group as unknown as { itemsIds?: string[]; ungroup?: () => Promise<unknown> };
         if (g.ungroup && Array.isArray(g.itemsIds) && g.itemsIds.some((m) => wanted.has(m))) {
-          await g.ungroup();
+          await withRateLimit(() => g.ungroup!());
         }
       }
     } catch (error) {
@@ -438,7 +380,7 @@ export class MiroCanvas implements Canvas {
     // cached handle can predate the grouping (it was created ungrouped), so its
     // groupId reads stale. The group's own `itemsIds` is always current.
     try {
-      const groups = await miro.board.get({ type: 'group' });
+      const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
       for (const group of groups) {
         const itemsIds = (group as unknown as { itemsIds?: string[] }).itemsIds;
         if (Array.isArray(itemsIds) && itemsIds.includes(id)) return itemsIds;
@@ -454,7 +396,7 @@ export class MiroCanvas implements Canvas {
     const item = this.items.get(id);
     if (!item) return;
     try {
-      await miro.board.remove(item);
+      await withRateLimit(() => miro.board.remove(item));
       this.items.delete(id);
     } catch (error) {
       console.warn('Could not remove an element', error);
@@ -468,7 +410,7 @@ export class MiroCanvas implements Canvas {
       | undefined;
     if (!connector?.style || !connector.sync) return;
     connector.style.strokeColor = color;
-    await withRetry(() => connector.sync!());
+    await withRateLimit(() => connector.sync!());
   }
 
   async setMeta(id: string, meta: ElementMeta): Promise<void> {
@@ -477,7 +419,7 @@ export class MiroCanvas implements Canvas {
       | { setMetadata?: (key: string, value: unknown) => Promise<unknown> }
       | undefined;
     if (!item?.setMetadata) return;
-    await withRetry(() => item.setMetadata!(META_KEY, meta));
+    await withRateLimit(() => item.setMetadata!(META_KEY, meta));
   }
 
   async getMeta(id: string): Promise<ElementMeta | null> {
@@ -487,7 +429,9 @@ export class MiroCanvas implements Canvas {
       | undefined;
     if (!item?.getMetadata) return null;
     try {
-      return ((await item.getMetadata(META_KEY)) as ElementMeta | undefined) ?? null;
+      return (
+        ((await withRateLimit(() => item.getMetadata!(META_KEY))) as ElementMeta | undefined) ?? null
+      );
     } catch {
       return null;
     }
@@ -497,40 +441,37 @@ export class MiroCanvas implements Canvas {
     // Items created over a frame can get captured by it, their coordinates
     // ending up parent-relative while we supplied absolute — re-pin them.
     try {
-      const [fresh] = await miro.board.get({ id: [id] });
+      const [fresh] = await withRateLimit(() => miro.board.get({ id: [id] }));
       if (!fresh) return;
       this.cache(fresh);
       const view = fresh as unknown as ReadView;
       if (!('parentId' in view) || !view.parentId) return;
-      const [parent] = await miro.board.get({ id: [view.parentId] });
+      const [parent] = await withRateLimit(() => miro.board.get({ id: [view.parentId!] }));
       if (!parent || parent.type !== 'frame') return;
       const p = parent as unknown as ReadView;
       const w = fresh as unknown as WriteView;
       w.x = absX - ((p.x ?? 0) - (p.width ?? 0) / 2);
       w.y = absY - ((p.y ?? 0) - (p.height ?? 0) / 2);
-      await withRetry(() => w.sync());
+      await withRateLimit(() => w.sync());
     } catch (error) {
       console.warn('Could not settle a created element into its frame', error);
     }
   }
 
   setBulkMode(on: boolean, signal?: AbortSignal): void {
-    setBulkWrites(on);
-    // Drop pacing the instant the run is aborted, so Pause is prompt even in the
-    // middle of a write-heavy unit (a spec). The build still stops at its next
-    // boundary; this just stops the 500ms gaps from drawing it out.
-    if (on && signal) {
-      signal.addEventListener('abort', () => void (bulkAborting = true), { once: true });
-    }
+    // The limiter drops the bulk pacing floor the instant the run aborts (via the
+    // signal), so Pause is prompt even mid-write; the build still stops at its
+    // next boundary.
+    setBulkWrites(on, signal);
   }
 
   async deselect(): Promise<void> {
-    await miro.board.deselect();
+    await withRateLimit(() => miro.board.deselect());
   }
 
   async deepLink(id: string): Promise<string | null> {
     try {
-      const info = await miro.board.getInfo();
+      const info = await withRateLimit(() => miro.board.getInfo());
       return `https://miro.com/app/board/${info.id}/?moveToWidget=${id}`;
     } catch (error) {
       console.warn('Could not resolve the board id for an element link', error);

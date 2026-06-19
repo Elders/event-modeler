@@ -8,13 +8,14 @@
 import './FieldsSection.css';
 import { useEffect, useRef, useState } from 'react';
 import { BLOCKS, type BlockType } from '../domain/vocabulary';
+import { completenessHousekeeping } from '../features/completeness';
 import { reportError } from '../features/helpers';
 import { setFields as saveFields } from '../features/fields/edit';
-import { syncFieldsFromText } from '../features/fields/sync';
+import { resolveFieldTarget } from '../features/fields/recognize';
+import { syncFieldsFromBoard } from '../features/fields/sync';
 import {
   FIELD_TYPES,
   displayMode,
-  isFieldable,
   newField,
   type Field,
   type FieldType,
@@ -41,23 +42,16 @@ export function FieldsSection() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const { canvas } = services();
-      let found: { id: string; type: BlockType } | null = null;
-      for (const item of selection) {
-        const meta = await canvas.getMeta(item.id);
-        if (meta && isFieldable(meta.type)) {
-          found = { id: item.id, type: meta.type };
-          break;
-        }
-      }
+      const found = await resolveFieldTarget(selection);
       if (cancelled) return;
       setTarget(found);
       const foundId = found?.id ?? null;
       if (foundId === loadedId.current) return;
       loadedId.current = foundId;
-      // Pull any fields the user typed directly on the element into the registry
-      // (text mode); box-mode blocks just read their stored fields.
-      const loaded = found ? await syncFieldsFromText(found.id, found.type) : [];
+      // Reconcile the on-board display back into the registry: parse fields the
+      // user typed on a sticky (text mode), or recover a box-mode block's fields
+      // from its attached box when its registry record was lost.
+      const loaded = found ? await syncFieldsFromBoard(found.id, found.type) : [];
       if (cancelled) return;
       setFields(loaded);
     })();
@@ -81,21 +75,40 @@ export function FieldsSection() {
       const [element] = await services().canvas.get([id]);
       if (stopped || !element || element.content === lastContent) return;
       lastContent = element.content;
-      const reconciled = await syncFieldsFromText(id, type);
+      const reconciled = await syncFieldsFromBoard(id, type);
       if (!stopped) setFields(reconciled);
     };
-    const timer = window.setInterval(() => void tick(), 800);
+    // Poll slowly: this only catches fields typed directly onto the sticky (the
+    // panel inputs update immediately on their own), so a relaxed cadence keeps
+    // it from being a constant drain on the shared API budget while selected.
+    const timer = window.setInterval(() => void tick(), 2500);
     return () => {
       stopped = true;
       clearInterval(timer);
     };
   }, [target?.id, target?.type]);
 
+  // After a field edit, run a completeness pass so connectors recolor right away
+  // for the editing user instead of waiting for the headless poll. Debounced so a
+  // burst of edits triggers one pass, and chained after the write so it reads the
+  // note's updated text. The headless poll remains the fallback for everyone else.
+  const nudgeTimer = useRef<number | null>(null);
+  const nudgeCompleteness = () => {
+    if (nudgeTimer.current !== null) clearTimeout(nudgeTimer.current);
+    nudgeTimer.current = window.setTimeout(() => void completenessHousekeeping(), 300);
+  };
+  useEffect(
+    () => () => {
+      if (nudgeTimer.current !== null) clearTimeout(nudgeTimer.current);
+    },
+    [],
+  );
+
   // Immediate persist (add / remove / type change). The list is the source of
   // truth while editing, so update locally first and write through.
   const save = (next: Field[]) => {
     setFields(next);
-    if (target) void saveFields(target.id, target.type, next).catch(reportError);
+    if (target) void saveFields(target.id, target.type, next).then(nudgeCompleteness).catch(reportError);
   };
 
   // Local-only update while typing a text input; committed on blur.
@@ -103,7 +116,7 @@ export function FieldsSection() {
     setFields((current) => current.map((field) => (field.id === id ? { ...field, ...patch } : field)));
 
   const persist = () => {
-    if (target) void saveFields(target.id, target.type, fields).catch(reportError);
+    if (target) void saveFields(target.id, target.type, fields).then(nudgeCompleteness).catch(reportError);
   };
 
   if (!target) {

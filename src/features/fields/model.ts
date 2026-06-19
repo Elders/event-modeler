@@ -7,7 +7,7 @@ export * from '../../domain/fields';
 export { FIELDS_KEY, type FieldRecord } from '../../domain/records';
 
 import { FIELDS_KEY, normalizeFieldRecords, type FieldRecord } from '../../domain/records';
-import type { Field } from '../../domain/fields';
+import { storableField, type Field } from '../../domain/fields';
 import type { BlockType } from '../../domain/vocabulary';
 import { services } from '../../services';
 
@@ -33,13 +33,38 @@ export async function readFieldRecords(): Promise<FieldRecord[]> {
   return normalizeFieldRecords(await services().store.read<unknown>(FIELDS_KEY, []));
 }
 
-export function recordFor(records: FieldRecord[], elementId: string): FieldRecord | undefined {
-  return records.find((record) => record.element === elementId);
+// The single write boundary for the field registry: persists every record in its
+// compact form (per-field ids stripped), so no caller can accidentally re-store
+// the regenerated ids and re-bloat app-data.
+export async function writeFieldRecords(records: FieldRecord[]): Promise<void> {
+  const compact = records.map((record) => ({
+    ...record,
+    fields: record.fields.map(storableField),
+  }));
+  await services().store.write(FIELDS_KEY, compact);
 }
 
-// The fields currently defined for one element (empty when none) — used by the
-// panel editor to populate itself on selection.
-export async function loadFields(elementId: string): Promise<Field[]> {
-  const records = await readFieldRecords();
-  return recordFor(records, elementId)?.fields ?? [];
+// One-time migration, run on board load: brings the registry to its current
+// shape. Two legacy forms are cleaned up — records that still embed a per-field
+// id (an older build inflated the registry with them), and text-mode (sticky)
+// records, which are no longer kept since a sticky's fields live in its own text.
+// The rewrite is size-reducing, so it goes through even when app-data is over
+// budget. Skipped once the stored data already matches.
+export async function compactFieldRegistry(): Promise<void> {
+  const raw = await services().store.read<unknown>(FIELDS_KEY, []);
+  if (!Array.isArray(raw)) return;
+  const records = normalizeFieldRecords(raw);
+  const boxOnly = records.filter((record) => displayMode(record.type) === 'box');
+  const hasPersistedId = raw.some(
+    (entry) =>
+      !!entry &&
+      Array.isArray((entry as FieldRecord).fields) &&
+      (entry as FieldRecord).fields.some((field) => typeof (field as Field).id === 'string'),
+  );
+  if (boxOnly.length === records.length && !hasPersistedId) return; // already current
+  await writeFieldRecords(boxOnly);
+}
+
+export function recordFor(records: FieldRecord[], elementId: string): FieldRecord | undefined {
+  return records.find((record) => record.element === elementId);
 }

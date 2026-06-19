@@ -166,23 +166,24 @@ export async function redockSliceButton(
 // Fallback re-docking for slice buttons (panel closed during the resize, or a
 // teammate resizing); the fast watcher handles the interactive case. Also
 // heals buttons that were evicted or deleted when a slice was shrunk.
-export async function autoRedockSlices(): Promise<void> {
+export async function autoRedockSlices(frames: CanvasElement[]): Promise<void> {
   const { canvas } = services();
   const records = await readSliceRecords();
   if (records.length === 0) return;
-  const frames = await canvas.containers();
+  // Fetch every slice button up front in one round-trip for the parent check,
+  // instead of a separate get per slice each tick.
+  const buttonIds = records.map((record) => record.labels[0]).filter((id): id is string => !!id);
+  const buttonById = new Map(
+    (buttonIds.length > 0 ? await canvas.get(buttonIds) : []).map((b) => [b.id, b] as const),
+  );
   for (const record of records) {
     const frame = frames.find((item) => item.id === record.frame);
     if (!frame) continue; // a deleted slice — cleanup handles it
     let needsRedock = typeof record.width !== 'number' || sliceSizeDiffers(frame, record);
     if (!needsRedock) {
       const buttonId = record.labels[0];
-      if (!buttonId) {
-        needsRedock = true;
-      } else {
-        const [button] = await canvas.get([buttonId]);
-        needsRedock = !button || button.kind !== 'image' || button.parentId !== frame.id;
-      }
+      const button = buttonId ? buttonById.get(buttonId) : undefined;
+      needsRedock = !button || button.kind !== 'image' || button.parentId !== frame.id;
     }
     if (needsRedock) await redockSliceButton(frame, record, records);
   }

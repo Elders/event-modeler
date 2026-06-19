@@ -6,19 +6,29 @@
 // registry of flagged connectors so a closed gap restores the arrow to the
 // exact color it had before.
 //
-// Fields come from the field registry (the tool's canonical store), so the
-// check reflects whatever the panel has synced.
+// Fields are read from what's drawn on the board (sticky text / attached box),
+// not the em-fields registry: the registry is a lazily-populated cache that can
+// lag the canvas, and this check must work for every field-bearing block whether
+// or not the panel has ever synced it.
 
 import { incompleteConnectors, type FieldedElement } from '../domain/completeness';
-import { FLAGS_KEY, type ConnectorFlag, type FieldRecord } from '../domain/records';
-import type { CanvasConnector } from '../ports/canvas';
+import { parseBoxFields } from '../domain/fields';
+import { FLAGS_KEY, type ConnectorFlag } from '../domain/records';
+import type { CanvasConnector, CanvasElement } from '../ports/canvas';
 import { services } from '../services';
-import { displayMode, readFieldRecords } from './fields/model';
+import { stickyFields } from './fields/board';
 
 // Miro's red; the default we fall back to if a flagged connector somehow had no
 // stroke color to remember.
 const INCOMPLETE_COLOR = '#F24726';
 const DEFAULT_CONNECTOR_COLOR = '#1a1a1a';
+
+// Whether a connector's live color is our incomplete red, compared case-
+// insensitively because Miro can echo the stored color back in a different case.
+// Only used to catch legacy orphan reds; the flag registry is the primary record.
+function isIncompleteColor(color: string | null): boolean {
+  return typeof color === 'string' && color.toLowerCase() === INCOMPLETE_COLOR.toLowerCase();
+}
 
 let running = false;
 
@@ -40,72 +50,114 @@ async function checkCompleteness(): Promise<void> {
   const flags = await store.read<ConnectorFlag[]>(FLAGS_KEY, []);
   if (connectors.length === 0 && flags.length === 0) return;
 
-  const records = await readFieldRecords();
-  const elements: FieldedElement[] = records.map((record) => ({
-    id: record.element,
-    fields: record.fields,
-  }));
-  // A screen/automation is a group, so a connector attaches to the group (or its
-  // title/box member) rather than the image that holds the fields. Resolve those
-  // endpoints back to the fielded element before checking, or the arrow could
-  // never see the source's fields and would stay red forever.
-  const resolved = await resolveGroupedEndpoints(connectors, records);
+  // Resolve grouped endpoints to their fielded image and read each connected
+  // element's fields straight off the board — in a fixed handful of batched
+  // reads, regardless of model size.
+  const { resolved, elements } = await analyze(connectors);
   const flaggedNow = incompleteConnectors(elements, resolved);
 
-  const byId = new Map(connectors.map((connector) => [connector.id, connector]));
-  const previously = new Set(flags.map((flag) => flag.connector));
+  // Reconcile each connector against whether it should be flagged. The decision
+  // is driven by the persisted flag registry, NOT by reading the connector's
+  // live color back — Miro normalizes the stored color string (case/format), so
+  // a comparison against INCOMPLETE_COLOR is unreliable and would strand arrows
+  // red. The registry is the reliable record of what we reddened; a live-color
+  // check is only a fallback to clean up legacy orphans (arrows reddened while
+  // em-flags couldn't be written). Writes are idempotent: a stable board does none.
+  const flagsById = new Map(flags.map((flag) => [flag.connector, flag] as const));
   const kept: ConnectorFlag[] = [];
   let changed = false;
 
-  // Restore connectors that are no longer incomplete (or were deleted).
-  for (const flag of flags) {
-    const live = byId.get(flag.connector);
-    if (live && flaggedNow.has(flag.connector)) {
-      kept.push(flag); // still incomplete — leave it red, keep its original color
-      continue;
+  for (const connector of connectors) {
+    const shouldFlag = flaggedNow.has(connector.id);
+    const existing = flagsById.get(connector.id);
+
+    if (shouldFlag) {
+      if (existing) {
+        kept.push(existing); // already reddened by us — leave it, no write
+      } else {
+        await canvas.setConnectorColor(connector.id, INCOMPLETE_COLOR);
+        kept.push({ connector: connector.id, original: connector.color ?? DEFAULT_CONNECTOR_COLOR });
+        changed = true;
+      }
+    } else if (existing) {
+      // No longer incomplete — restore to the remembered pre-red color, drop the
+      // flag. Registry-driven, so it works regardless of how the color reads back.
+      await canvas.setConnectorColor(connector.id, existing.original);
+      changed = true;
+    } else if (isIncompleteColor(connector.color)) {
+      // Red but untracked (reddened while em-flags couldn't be written) — restore.
+      await canvas.setConnectorColor(connector.id, DEFAULT_CONNECTOR_COLOR);
+      changed = true;
     }
-    if (live) await canvas.setConnectorColor(flag.connector, flag.original);
-    changed = true;
   }
 
-  // Redden connectors that became incomplete, remembering their prior color.
-  for (const id of flaggedNow) {
-    if (previously.has(id)) continue;
-    const live = byId.get(id);
-    if (!live) continue;
-    await canvas.setConnectorColor(id, INCOMPLETE_COLOR);
-    kept.push({ connector: id, original: live.color ?? DEFAULT_CONNECTOR_COLOR });
-    changed = true;
-  }
-
+  // Flags whose connector was deleted are dropped (kept is built only from live
+  // connectors); persist whenever the tracked set changed.
+  if (kept.length !== flags.length) changed = true;
   if (changed) await store.write(FLAGS_KEY, kept);
 }
 
-// Rewrites connector endpoints that land on a grouped element so they point at
-// the group member that carries the fields. A screen or automation is a
-// title + image + box group; a connector can attach to the group id or to any
-// member, none of which is the image the field record is keyed by. Mapping the
-// group id and every member to the fielded member makes such connectors match.
-// Only box-display blocks (screens, automations) are grouped, so this is skipped
-// when none are present.
-async function resolveGroupedEndpoints(
+// Resolves grouped endpoints to their fielded image and reads each connected
+// element's fields from the board. A screen/automation is a title + image + box
+// group, and a connector can attach to the group id or any member — none of
+// which is the fielded image — so endpoints are remapped to the group's lone
+// image member (registry-free, so it works before the panel has synced). The
+// reads are batched to a fixed few calls: the groups, all grouped members at
+// once (which also yields each group's box content), then the remaining sticky
+// endpoints in one fetch.
+async function analyze(
   connectors: CanvasConnector[],
-  records: FieldRecord[],
-): Promise<CanvasConnector[]> {
-  if (!records.some((record) => displayMode(record.type) === 'box')) return connectors;
-  const fielded = new Set(records.map((record) => record.element));
-  const groups = await services().canvas.groups();
-  const resolve = new Map<string, string>();
+): Promise<{ resolved: CanvasConnector[]; elements: FieldedElement[] }> {
+  const { canvas } = services();
+  const groups = await canvas.groups();
+  const memberIds = [...new Set(groups.flatMap((group) => group.members))];
+  const membersById = new Map(
+    (memberIds.length > 0 ? await canvas.get(memberIds) : []).map((el) => [el.id, el] as const),
+  );
+
+  const toImage = new Map<string, string>(); // group id / any member → fielded image
+  const boxByImage = new Map<string, CanvasElement>(); // fielded image → its box shape
   for (const group of groups) {
-    const target = group.members.find((member) => fielded.has(member));
-    if (!target) continue;
-    resolve.set(group.id, target);
-    for (const member of group.members) resolve.set(member, target);
+    const members = group.members
+      .map((id) => membersById.get(id))
+      .filter((member): member is CanvasElement => !!member);
+    const image = members.find((member) => member.kind === 'image');
+    if (!image) continue; // a plain user grouping, not a screen/automation
+    toImage.set(group.id, image.id);
+    for (const id of group.members) toImage.set(id, image.id);
+    const box = members.find((member) => member.kind === 'shape');
+    if (box) boxByImage.set(image.id, box);
   }
-  if (resolve.size === 0) return connectors;
-  return connectors.map((connector) => ({
+
+  const resolved = connectors.map((connector) => ({
     ...connector,
-    start: connector.start ? resolve.get(connector.start) ?? connector.start : null,
-    end: connector.end ? resolve.get(connector.end) ?? connector.end : null,
+    start: connector.start ? toImage.get(connector.start) ?? connector.start : null,
+    end: connector.end ? toImage.get(connector.end) ?? connector.end : null,
   }));
+
+  const endpointIds = new Set<string>();
+  for (const connector of resolved) {
+    if (connector.start) endpointIds.add(connector.start);
+    if (connector.end) endpointIds.add(connector.end);
+  }
+
+  const elements: FieldedElement[] = [];
+  const stickyIds: string[] = [];
+  for (const id of endpointIds) {
+    const box = boxByImage.get(id); // an image endpoint reads from its captured box
+    if (box) {
+      const fields = parseBoxFields(box.content);
+      if (fields.length > 0) elements.push({ id, fields });
+    } else {
+      stickyIds.push(id);
+    }
+  }
+  if (stickyIds.length > 0) {
+    for (const element of await canvas.get(stickyIds)) {
+      const fields = stickyFields(element);
+      if (fields.length > 0) elements.push({ id: element.id, fields });
+    }
+  }
+
+  return { resolved, elements };
 }

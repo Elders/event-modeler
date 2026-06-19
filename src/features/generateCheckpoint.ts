@@ -28,13 +28,24 @@ export async function loadCheckpoint(): Promise<GenerationCheckpoint | null> {
 }
 
 export async function saveCheckpoint(checkpoint: GenerationCheckpoint): Promise<void> {
-  await services().store.write(GEN_CHECKPOINT_KEY, checkpoint);
+  await services().store.write(GEN_CHECKPOINT_KEY, { ...checkpoint, savedAt: Date.now() });
 }
 
 // Clears by writing an empty object rather than null — board app data reliably
 // accepts an object, and loadCheckpoint treats it as absent.
 export async function clearCheckpoint(): Promise<void> {
   await services().store.write(GEN_CHECKPOINT_KEY, {});
+}
+
+// Drops a checkpoint left behind by an abandoned generation — one not resumed
+// within `maxAgeMs` — so its plan/refToId can't occupy the board's app-data
+// budget indefinitely. A recent checkpoint (a deliberate pause, a reload mid-run)
+// is left intact so it can still be resumed. Best-effort, runs once on load.
+export async function clearStaleCheckpoint(maxAgeMs: number): Promise<void> {
+  const cp = await loadCheckpoint();
+  if (!cp) return;
+  if (typeof cp.savedAt === 'number' && Date.now() - cp.savedAt < maxAgeMs) return;
+  await clearCheckpoint();
 }
 
 export async function hasCheckpoint(): Promise<boolean> {

@@ -4,6 +4,7 @@
 // are no item-update or item-delete events.
 
 import { LINKS_KEY, SLICES_KEY, SPECS_KEY, type SpecLink } from '../../domain/records';
+import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
 import { readRecords } from '../helpers';
 import { autoRedockSlices } from '../slices';
@@ -15,11 +16,10 @@ import { reflowSpecFrame } from './reflow';
 // user: labels, "+" buttons and linked copies survive a container deletion if
 // they were never (or no longer) attached as children, so the registries
 // remember them.
-async function cleanupDeadRegistry(key: string, pruneLinks: boolean) {
+async function cleanupDeadRegistry(key: string, pruneLinks: boolean, frames: CanvasElement[]) {
   const { canvas, store } = services();
   const records = await readRecords(key);
   if (records.length === 0) return;
-  const frames = await canvas.containers();
   const liveIds = new Set(frames.map((frame) => frame.id));
   const dead = records.filter((record) => !liveIds.has(record.frame));
   if (dead.length === 0) return;
@@ -49,9 +49,9 @@ async function cleanupDeadRegistry(key: string, pruneLinks: boolean) {
   }
 }
 
-async function cleanupDeadFrames() {
-  await cleanupDeadRegistry(SPECS_KEY, true);
-  await cleanupDeadRegistry(SLICES_KEY, false);
+async function cleanupDeadFrames(frames: CanvasElement[]) {
+  await cleanupDeadRegistry(SPECS_KEY, true, frames);
+  await cleanupDeadRegistry(SLICES_KEY, false, frames);
 }
 
 // Width changes are detected by polling (no resize events); a reflow fires only
@@ -60,11 +60,10 @@ async function cleanupDeadFrames() {
 // multiplayer/panel-closed fallback.
 const pendingWidths = new Map<string, number>();
 
-async function autoReflowSpecs() {
-  const { canvas, store } = services();
+async function autoReflowSpecs(frames: CanvasElement[]) {
+  const { store } = services();
   const records = await readSpecRecords();
   if (records.length === 0) return;
-  const frames = await canvas.containers();
   let dirty = false;
   for (const record of records) {
     const frame = frames.find((item) => item.id === record.frame);
@@ -95,10 +94,17 @@ export async function specHousekeeping(): Promise<void> {
   if (housekeepingRunning) return;
   housekeepingRunning = true;
   try {
-    await cleanupDeadFrames();
-    await autoReflowSpecs();
-    await autoRedockSlices();
+    // One frame fetch shared across the passes that need it, instead of each
+    // pass re-querying every frame on the board.
+    const frames = await services().canvas.containers();
+    await cleanupDeadFrames(frames);
+    await autoReflowSpecs(frames);
+    await autoRedockSlices(frames);
     await syncSpecCopies();
+  } catch (error) {
+    // A retry-exhausted rate-limit (or any failure) must not surface as an
+    // unhandled rejection; the next tick retries from a clean state.
+    console.warn('Spec housekeeping failed', error);
   } finally {
     housekeepingRunning = false;
   }

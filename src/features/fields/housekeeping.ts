@@ -11,10 +11,10 @@ import {
   htmlToLines,
   type Field,
 } from '../../domain/fields';
-import { FIELDS_KEY, type FieldRecord } from '../../domain/records';
+import { type FieldRecord } from '../../domain/records';
 import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
-import { displayMode, readFieldRecords } from './model';
+import { displayMode, readFieldRecords, writeFieldRecords } from './model';
 import { removeFieldsDisplay, renderFields } from './render';
 
 let running = false;
@@ -24,13 +24,17 @@ export async function fieldsHousekeeping(): Promise<void> {
   running = true;
   try {
     await doFieldsHousekeeping();
+  } catch (error) {
+    // A retry-exhausted rate-limit (or any failure) must not surface as an
+    // unhandled rejection; the next tick retries from a clean state.
+    console.warn('Fields housekeeping failed', error);
   } finally {
     running = false;
   }
 }
 
 async function doFieldsHousekeeping(): Promise<void> {
-  const { canvas, store } = services();
+  const { canvas } = services();
   const records = await readFieldRecords();
   if (records.length === 0) return;
 
@@ -60,7 +64,7 @@ async function doFieldsHousekeeping(): Promise<void> {
     }
   }
 
-  if (dirty) await store.write(FIELDS_KEY, survivors);
+  if (dirty) await writeFieldRecords(survivors);
 }
 
 // Whether the on-board display is out of sync with the registry. Text-mode
