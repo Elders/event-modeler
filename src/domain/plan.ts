@@ -11,9 +11,10 @@ import type { FieldType } from './fields';
 import type { FieldRecord } from './records';
 import { STICKY_LABEL, type BlockType, type StickyBlockType } from './vocabulary';
 
-// Every block a plan may place — the full vocabulary minus 'slice', since slices
-// are the containers blocks live in, not blocks themselves.
-export type PlannableBlockType = Exclude<BlockType, 'slice'>;
+// Every block a plan may place — the full vocabulary minus 'slice' (slices are
+// the containers blocks live in, not blocks themselves) and 'note' (a manual
+// free-text annotation that the generator never places).
+export type PlannableBlockType = Exclude<BlockType, 'slice' | 'note'>;
 
 // 'error' is intentionally absent: errors are never timeline blocks — they
 // belong only in a specification's Then zone (see PlannedSpec.errors). Any error
@@ -138,7 +139,9 @@ function asLane(value: unknown, fallback: PlanLane): PlanLane {
   return value === -1 || value === 0 || value === 1 ? value : fallback;
 }
 
-function isStickyType(type: PlannableBlockType): type is StickyBlockType {
+function isStickyType(
+  type: PlannableBlockType,
+): type is Extract<StickyBlockType, PlannableBlockType> {
   return (STICKY_TYPES as PlannableBlockType[]).includes(type);
 }
 

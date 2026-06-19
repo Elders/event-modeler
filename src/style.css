@@ -14,6 +14,7 @@
   --em-read-model: #cee741;
   --em-external-event: #f5e14b;
   --em-error: #f0626a;
+  --em-note: #c9c9d1;
   --em-purple: #534ab7;
   --em-purple-light: #afa9ec;
 }
@@ -40,4 +41,8 @@ body {
 
 .bg-error {
   background: var(--em-error);
+}
+
+.bg-note {
+  background: var(--em-note);
 }

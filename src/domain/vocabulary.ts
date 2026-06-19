@@ -11,13 +11,14 @@ export type BlockType =
   | 'readModel'
   | 'externalEvent'
   | 'error'
+  | 'note'
   | 'automation'
   | 'screen'
   | 'slice';
 
 export type StickyBlockType = Extract<
   BlockType,
-  'event' | 'command' | 'readModel' | 'externalEvent' | 'error'
+  'event' | 'command' | 'readModel' | 'externalEvent' | 'error' | 'note'
 >;
 
 // Everything the palette can place by drag or click: the typed blocks plus the
@@ -28,7 +29,7 @@ export type PaletteKind = BlockType | 'specification' | 'swimlane' | 'chapter';
 
 // The conventional event-modeling colors. Adapters translate these to native
 // canvas colors (e.g. Miro's fixed sticky palette).
-export type CardColor = 'orange' | 'blue' | 'light_green' | 'yellow' | 'red';
+export type CardColor = 'orange' | 'blue' | 'light_green' | 'yellow' | 'red' | 'gray';
 
 export const STICKY_COLORS: Record<StickyBlockType, CardColor> = {
   event: 'orange',
@@ -36,6 +37,7 @@ export const STICKY_COLORS: Record<StickyBlockType, CardColor> = {
   readModel: 'light_green',
   externalEvent: 'yellow',
   error: 'red',
+  note: 'gray',
 };
 
 export const STICKY_LABEL: Record<StickyBlockType, string> = {
@@ -44,6 +46,7 @@ export const STICKY_LABEL: Record<StickyBlockType, string> = {
   readModel: 'Read model',
   externalEvent: 'External event',
   error: 'Error',
+  note: 'Note',
 };
 
 // The reverse of STICKY_COLORS: the block type a sticky's fill color denotes.
@@ -75,6 +78,7 @@ export const BLOCKS: BlockDef[] = [
   { type: 'readModel', label: 'Read model', hint: 'data the user sees' },
   { type: 'externalEvent', label: 'External event', hint: 'from an outside system' },
   { type: 'error', label: 'Error', hint: 'a rejected outcome' },
+  { type: 'note', label: 'Note', hint: 'a free-text annotation' },
   { type: 'automation', label: 'Automation', hint: 'reacts, issues commands' },
   { type: 'screen', label: 'Screen', hint: 'sketch or capture' },
   { type: 'slice', label: 'Slice', hint: 'one atomic feature' },
