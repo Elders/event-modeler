@@ -1,12 +1,9 @@
-// Adopting plain board items — the ones the user drew with the host's own tools,
-// carrying no model metadata — into typed model elements. A plain sticky note
-// becomes the block its fill color denotes (so it gains a type and can carry
-// fields); a plain frame becomes a slice or a specification. Every operation
-// works across the whole selection at once.
+// Adopting plain frames — the ones the user drew with the host's own tools,
+// carrying no model metadata — as typed model structures: a slice or a
+// specification. Sticky notes need no conversion: a sticky's fill color already
+// denotes its block type, which is exactly what the Fields editor and the
+// completeness check read, so a plain colored sticky already behaves as its block.
 
-import { extractName } from '../domain/fields';
-import { LINKS_KEY, type SpecLink } from '../domain/records';
-import { STICKY_LABEL, stickyTypeForColor } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
 import { adoptSliceFrame, readSliceRecords } from './slices';
@@ -15,40 +12,15 @@ import { readSpecRecords } from './specs/model';
 
 export type FrameConvertTarget = 'slice' | 'spec';
 
-// What the current selection offers to convert — drives the panel's contextual
-// buttons.
+// How many plain frames the current selection offers to convert — drives the
+// panel's contextual buttons.
 export interface ConvertTargets {
-  stickies: number;
   frames: number;
 }
 
 export async function inspectSelection(): Promise<ConvertTargets> {
   const selection = await services().canvas.selection();
-  const [stickies, frames] = await Promise.all([
-    convertibleStickies(selection),
-    convertibleFrames(selection),
-  ]);
-  return { stickies: stickies.length, frames: frames.length };
-}
-
-// Plain stickies in the selection: a sticky card whose color maps to a block
-// type, with no tool metadata, that isn't a spec copy (copies are unmetadata'd
-// cards too, so they're excluded by the link registry).
-async function convertibleStickies(selection: CanvasElement[]): Promise<CanvasElement[]> {
-  const { canvas, store } = services();
-  const cards = selection.filter(
-    (el) => el.kind === 'card' && stickyTypeForColor(el.color) !== null,
-  );
-  if (cards.length === 0) return [];
-  const links = await store.read<SpecLink[]>(LINKS_KEY, []);
-  const copyIds = new Set(links.map((link) => link.copy));
-  const plain: CanvasElement[] = [];
-  for (const card of cards) {
-    if (copyIds.has(card.id)) continue;
-    if (await canvas.getMeta(card.id)) continue; // already a typed/tool element
-    plain.push(card);
-  }
-  return plain;
+  return { frames: (await convertibleFrames(selection)).length };
 }
 
 // Plain frames in the selection: containers not already registered as a slice
@@ -59,28 +31,6 @@ async function convertibleFrames(selection: CanvasElement[]): Promise<CanvasElem
   const [specs, slices] = await Promise.all([readSpecRecords(), readSliceRecords()]);
   const taken = new Set([...specs, ...slices].map((record) => record.frame));
   return frames.filter((frame) => !taken.has(frame.id));
-}
-
-// Tags each plain sticky with the block type its color denotes; its existing
-// text becomes the block name, so nothing the user wrote is lost. An empty
-// sticky gets the block's default name (Event, Command, …) instead of being
-// left blank.
-export async function convertStickies(): Promise<number> {
-  const { canvas, notifier } = services();
-  const targets = await convertibleStickies(await canvas.selection());
-  for (const card of targets) {
-    const type = stickyTypeForColor(card.color);
-    if (!type) continue;
-    await canvas.setMeta(card.id, { type });
-    if (extractName(card.content) === '') {
-      await canvas.apply([{ id: card.id, content: STICKY_LABEL[type] }]);
-    }
-  }
-  if (targets.length > 0) {
-    const noun = targets.length === 1 ? 'sticky note' : 'sticky notes';
-    await notifier.info(`Converted ${targets.length} ${noun} to typed blocks.`);
-  }
-  return targets.length;
 }
 
 // Adopts each plain frame as a slice or a specification.

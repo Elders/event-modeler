@@ -2,7 +2,7 @@
 // Columns step along the timeline; lanes are actors — screens and automations
 // (-1), commands & read models (0), events (1).
 
-import type { BlockType } from '../domain/vocabulary';
+import { stickyTypeForColor, type BlockType } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
 import { connect } from './connectors';
@@ -171,8 +171,11 @@ async function findStampAnchor(
   const matches: { element: CanvasElement; index: number }[] = [];
   for (const el of selection) {
     const meta = await canvas.getMeta(el.id);
-    if (!meta) continue;
-    const index = nodes.findIndex((node) => node.block === meta.type);
+    // A plain (unconverted) sticky has no metadata — fall back to the type its
+    // fill color denotes, so a pattern can anchor on it without conversion.
+    const type = meta?.type ?? (el.kind === 'card' ? stickyTypeForColor(el.color) : null);
+    if (!type) continue;
+    const index = nodes.findIndex((node) => node.block === type);
     if (index >= 0) matches.push({ element: el, index });
   }
   return matches.length === 1 ? matches[0] : null;
