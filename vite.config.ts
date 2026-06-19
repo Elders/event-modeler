@@ -7,6 +7,11 @@ import react from '@vitejs/plugin-react';
 // Both must be declared as build inputs so `vite build` emits both pages.
 export default defineConfig({
   plugins: [react()],
+  // Relative asset paths so the build works under any URL prefix — in particular
+  // a GitHub Pages project site at https://<user>.github.io/<repo>/ — without
+  // hardcoding the repo name. The panel is opened via the relative 'app.html'
+  // (see src/index.ts), which resolves against the same prefix.
+  base: './',
   server: {
     port: 3000,
   },
