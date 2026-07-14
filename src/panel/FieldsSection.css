@@ -4,7 +4,7 @@
 .fields-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   margin-bottom: 8px;
 }
 
@@ -13,6 +13,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  /* tighter wrap inside a row than between rows, so custom rows read as one unit */
+  row-gap: 4px;
 }
 
 .field-input {
@@ -43,6 +45,7 @@
 .field-custom {
   flex: 1 1 100%;
   min-width: 0;
+  order: 1; /* wrap below the row; keeps × on line 1 with name+type */
 }
 
 .field-remove {
