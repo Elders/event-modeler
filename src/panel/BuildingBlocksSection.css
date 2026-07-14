@@ -43,3 +43,10 @@
   font-size: 11px;
   color: #8e8ea0;
 }
+
+/* The Screen tile in convert mode: plain images are selected, so a click
+   converts them instead of placing a new screen. */
+.tile-converts .tile-hint {
+  color: var(--em-purple);
+  font-weight: 500;
+}

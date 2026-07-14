@@ -21,7 +21,7 @@ export function Panel() {
       <div className="tab-panel" role="tabpanel">
         {tab === 'build' ? (
           <>
-            <BuildingBlocksSection guard={guard} />
+            <BuildingBlocksSection busy={busy} guard={guard} />
             <PatternsSection busy={busy} guard={guard} />
             <ConvertSection busy={busy} guard={guard} />
           </>

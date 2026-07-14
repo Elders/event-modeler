@@ -80,8 +80,11 @@ The panel presents one tile per concept plus the tool structures
 - **Click** a tile → the element is created at the center of the current view.
 
 A few tiles act on the current selection rather than placing a default:
-clicking **Slice** wraps the selected elements in a slice, and clicking
-**Specification** can attach the spec to a selected slice (§8.3).
+clicking **Slice** wraps the selected elements in a slice, clicking
+**Specification** can attach the spec to a selected slice (§8.3), and clicking
+**Screen** while plain images are selected converts them into screens (§8.4) —
+the tile's hint announces the mode while the selection holds. In every case a
+drag still places the default element at the drop point.
 
 ### 4.2 Cards
 
@@ -282,6 +285,13 @@ to the selection, it offers:
   name. Cards whose color carries no model meaning are left alone.
 - **Frames to slice or spec** — a plain container becomes a slice or a
   specification, at the user's choice.
+- **Images to screens** — a plain image becomes a screen: it gains the screen
+  type and the grouped editable title above it (defaulting to the image's own
+  title, else the concept name), after which it is indistinguishable from a
+  palette-placed screen. Offered through the palette's **Screen** tile (§4.1),
+  which converts every plain image in the selection at once; images the tool
+  already manages (screens, automation icons, on-canvas buttons) are left
+  alone.
 
 Conversion runs across the whole selection at once and never touches items the
 tool already manages.

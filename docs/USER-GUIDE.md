@@ -77,7 +77,7 @@ expands to keep new content visible.
 |---|---|
 | **Event / Command / Read model / External event / Error / Note** | A colored sticky with the block name as its text. Rename it by editing the sticky's first line. |
 | **Automation** | A gear icon with an editable title above it, grouped to move as one. |
-| **Screen** | An editable title above a dashed white sketch surface, grouped to move as one. Draw your UI over it with Miro's pen/shapes, or link it into flows like any block. |
+| **Screen** | An editable title above a dashed white sketch surface, grouped to move as one. Draw your UI over it with Miro's pen/shapes, or link it into flows like any block. **Click behaves specially:** with plain images selected (screenshots, mockups you pasted onto the board), the tile converts them into screens instead — its hint switches to e.g. *"convert 2 selected images"* while they're selected. A drag still places a new sketch screen. |
 | **Slice** | A transparent frame sized to span the three lanes. **Click behaves specially:** with elements selected, the slice wraps *around your selection*; with nothing selected (or on drag), you get a default-size slice. Elements inside a slice move with it. |
 | **Specification** | A Given/When/Then frame (see §6). **Click behaves specially:** with a slice selected, the spec attaches beneath that slice and takes its name; otherwise it appears standalone at the view center. |
 | **Swimlane** | One horizontal lane guide. Place three and label them "Screens", "Commands & read models", "Events" for the conventional layout. Guides are pure decoration — nothing snaps to them. |
@@ -115,6 +115,11 @@ to adopt them as app-managed structures.
 
 Sticky notes never need converting — their fill color already sets their block
 type. A plain orange sticky *is* an event as far as the app is concerned.
+
+Plain **images** (screenshots, pasted mockups) convert too, via the **Screen**
+tile in Building blocks: select the images and click the tile (§3.1). Each one
+gains an editable title and becomes a real screen — it can carry fields and
+anchor patterns like any other block.
 
 ---
 

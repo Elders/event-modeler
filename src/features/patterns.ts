@@ -7,7 +7,7 @@ import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
-import { ensureVisible, viewportCenter } from './helpers';
+import { absoluteCenter, ensureVisible, viewportCenter } from './helpers';
 
 export type PatternId =
   | 'command'
@@ -149,15 +149,6 @@ const PATTERNS: Record<PatternId, { nodes: StampNode[]; links: [number, number][
     ],
   },
 };
-
-// The selected element's absolute center. A child of a frame reports coords
-// relative to the frame's top-left, so convert through the parent when present.
-async function absoluteCenter(el: CanvasElement): Promise<{ x: number; y: number }> {
-  if (!el.parentId) return { x: el.x, y: el.y };
-  const [parent] = await services().canvas.get([el.parentId]);
-  if (!parent || parent.kind !== 'container') return { x: el.x, y: el.y };
-  return { x: parent.x - parent.width / 2 + el.x, y: parent.y - parent.height / 2 + el.y };
-}
 
 // If the user has exactly one block of a type this pattern contains selected,
 // the stamp anchors on it: that block is reused as the matching node and the

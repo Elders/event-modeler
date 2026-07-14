@@ -28,6 +28,15 @@ export async function ensureVisible(boxes: Box[]): Promise<void> {
   if (expanded) await viewport.set(expanded);
 }
 
+// The element's absolute center. A child of a frame reports coords relative to
+// the frame's top-left, so convert through the parent when present.
+export async function absoluteCenter(el: CanvasElement): Promise<{ x: number; y: number }> {
+  if (!el.parentId) return { x: el.x, y: el.y };
+  const [parent] = await services().canvas.get([el.parentId]);
+  if (!parent || parent.kind !== 'container') return { x: el.x, y: el.y };
+  return { x: parent.x - parent.width / 2 + el.x, y: parent.y - parent.height / 2 + el.y };
+}
+
 // Puts an editable title above an element (screens, automations) and groups the
 // pair so they move as one. Positions come from the intended absolute
 // coordinates; grouping is cosmetic cohesion, so its failure must not fail the
@@ -50,7 +59,11 @@ export async function addTitleAbove(
     align: 'center',
   });
   await canvas.settle(title.id, absX, titleY);
-  await canvas.group([anchor.id, title.id]);
+  // Group with the anchor's whole existing group, not the anchor alone — an
+  // adopted image may already sit in a user's group, and grouping just the pair
+  // would split it out (same idiom as the fields box in fields/render).
+  const members = await canvas.groupMembers(anchor.id);
+  await canvas.group([...new Set([...members, title.id])]);
   return title;
 }
 

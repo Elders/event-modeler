@@ -1,11 +1,14 @@
 // The palette of event-modeling building blocks. Every tile is draggable onto
 // the board (Miro fires the drop at the cursor) and also placeable by click.
 // Typed blocks place at the view center on click; the two tool tiles
-// (specification, swimlanes) run their own features.
+// (specification, swimlanes) run their own features. Two tiles are
+// selection-aware on click: Slice wraps the selected elements, and Screen
+// converts selected plain images into screens instead of placing a new one.
 
 import './BuildingBlocksSection.css';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BLOCKS, type PaletteKind } from '../domain/vocabulary';
+import { adoptableImageCount, placeOrAdoptScreens } from '../features/adoptImages';
 import { createBlockAtCenter } from '../features/createBlock';
 import { insertChapter } from '../features/chapter';
 import { createSliceAroundSelection } from '../features/slices';
@@ -13,6 +16,7 @@ import { insertSwimlane } from '../features/swimlane';
 import { addSpecification } from '../features/specs/create';
 import { Swatch } from './Swatch';
 import type { Guard } from './useBusyGuard';
+import { useSelection } from './useSelection';
 
 interface PaletteTile {
   kind: PaletteKind;
@@ -30,13 +34,16 @@ const TILES: PaletteTile[] = [
       kind: block.type,
       label: block.label,
       hint: block.hint,
-      // Clicking the slice tile wraps the current selection in a padded slice
-      // (a drag still drops a default slice at the cursor); the rest place at
-      // the view center.
+      // Clicking the slice tile wraps the current selection in a padded slice,
+      // and clicking the screen tile converts selected plain images (a drag
+      // still drops the default element at the cursor); the rest place at the
+      // view center.
       placeOnClick:
         block.type === 'slice'
           ? createSliceAroundSelection
-          : () => createBlockAtCenter(block.type),
+          : block.type === 'screen'
+            ? placeOrAdoptScreens
+            : () => createBlockAtCenter(block.type),
     }),
   ),
   {
@@ -59,9 +66,30 @@ const TILES: PaletteTile[] = [
   },
 ];
 
-export function BuildingBlocksSection({ guard }: { guard: Guard }) {
+export function BuildingBlocksSection({ busy, guard }: { busy: boolean; guard: Guard }) {
   // Where the pointer went down on a tile — used to tell a click from a drag.
   const downPos = useRef<{ x: number; y: number } | null>(null);
+
+  // Plain images in the selection switch the Screen tile into convert mode; the
+  // count drives its hint. Re-inspected when a panel action finishes (just-
+  // converted images stop being plain) and once more after a short settle, since
+  // a just-dropped screen can be selected before its metadata write lands.
+  const selection = useSelection();
+  const selectionKey = selection.map((item) => item.id).join(',');
+  const [adoptable, setAdoptable] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const inspect = () =>
+      void adoptableImageCount().then((count) => {
+        if (!cancelled) setAdoptable(count);
+      });
+    inspect();
+    const settle = window.setTimeout(inspect, 900);
+    return () => {
+      cancelled = true;
+      clearTimeout(settle);
+    };
+  }, [selectionKey, busy]);
 
   return (
     <section className="section">
@@ -70,14 +98,24 @@ export function BuildingBlocksSection({ guard }: { guard: Guard }) {
       <div className="tile-grid">
         {TILES.map((tile) => {
           const place = guard(() => tile.placeOnClick());
+          const converts = tile.kind === 'screen' && adoptable > 0;
+          const hint = converts
+            ? adoptable === 1
+              ? 'convert selected image'
+              : `convert ${adoptable} selected images`
+            : tile.hint;
           return (
             <div
               key={tile.kind}
-              className="tile miro-draggable"
+              className={`tile miro-draggable${converts ? ' tile-converts' : ''}`}
               data-block={tile.kind}
               role="button"
               tabIndex={0}
-              title="Drag onto the board, or click to place at the center of the view"
+              title={
+                converts
+                  ? 'Click to convert the selected images into screens; a drag still places a new one'
+                  : 'Drag onto the board, or click to place at the center of the view'
+              }
               onPointerDown={(e) => {
                 downPos.current = { x: e.clientX, y: e.clientY };
               }}
@@ -93,7 +131,7 @@ export function BuildingBlocksSection({ guard }: { guard: Guard }) {
               <Swatch kind={tile.kind} />
               <span className="tile-text">
                 <span className="tile-name">{tile.label}</span>
-                <span className="tile-hint">{tile.hint}</span>
+                <span className="tile-hint">{hint}</span>
               </span>
             </div>
           );
