@@ -51,7 +51,7 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
                       name: { type: 'string' },
                       type: {
                         type: 'string',
-                        enum: ['string', 'number', 'date', 'time', 'datetime', 'uuid'],
+                        enum: ['string', 'number', 'boolean', 'date', 'time', 'datetime', 'uuid'],
                       },
                     },
                     required: ['name', 'type'],
@@ -131,7 +131,7 @@ Patterns — most slices follow one of four shapes; use whichever fits:
 - translation: external event → automation → event (an outside fact becomes an internal one).
 
 Fields — the data each block carries:
-- Give every data-bearing block (command, event, readModel, screen, automation) a "fields" list; each field has a "name" and a "type" (string, number, date, time, datetime, or uuid). Use an empty list ([]) for a block with no data.
+- Give every data-bearing block (command, event, readModel, screen, automation) a "fields" list; each field has a "name" and a "type" (string, number, boolean, date, time, datetime, or uuid). Use an empty list ([]) for a block with no data.
 - Information flows along the arrows: a field a block holds must come from a block pointing into it, and a field keeps the SAME name and type everywhere it travels (an "orderId : uuid" on a command stays "orderId : uuid" on the event it produces). The board runs an information-completeness check — if a block declares a field that no block pointing into it provides (matched by name and type), the arrow into that block turns red. So introduce each field where it originates and carry it forward unchanged, so the generated model comes out complete (no red arrows).
 
 Guidance:

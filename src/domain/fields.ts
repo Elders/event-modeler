@@ -4,7 +4,15 @@
 // Miro's text-bearing items accept; the parsers read it back so an element's
 // name survives round-trips and manual edits.
 
-export type FieldType = 'string' | 'number' | 'date' | 'time' | 'datetime' | 'uuid' | 'custom';
+export type FieldType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'time'
+  | 'datetime'
+  | 'uuid'
+  | 'custom';
 
 export interface Field {
   id: string;
@@ -18,6 +26,7 @@ export interface Field {
 export const FIELD_TYPES: { value: FieldType; label: string }[] = [
   { value: 'string', label: 'String' },
   { value: 'number', label: 'Number' },
+  { value: 'boolean', label: 'Boolean' },
   { value: 'date', label: 'Date' },
   { value: 'time', label: 'Time' },
   { value: 'datetime', label: 'Date-time' },
@@ -137,7 +146,7 @@ function parseFieldLine(line: string): Field {
 // Maps a displayed type label back to a FieldType; an unrecognized label
 // becomes a custom type carrying the label verbatim.
 function typeFromLabel(label: string): { type: FieldType; customType?: string } {
-  const known: FieldType[] = ['string', 'number', 'date', 'time', 'datetime', 'uuid'];
+  const known: FieldType[] = ['string', 'number', 'boolean', 'date', 'time', 'datetime', 'uuid'];
   const match = known.find((type) => type === label.toLowerCase());
   return match ? { type: match } : { type: 'custom', customType: label };
 }

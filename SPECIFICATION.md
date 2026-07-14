@@ -138,8 +138,8 @@ than attached items, the completeness check (§7) ignores it.
 A field is a **named, typed datum** an element carries — the data that flows
 through the model. Every block except errors can carry fields: commands,
 events, read models, external events, screens, and automations. Each field has
-a name and a type drawn from a fixed set — string, number, date, time,
-date-time, UUID — or a free-text **custom** type.
+a name and a type drawn from a fixed set — string, number, boolean, date,
+time, date-time, UUID — or a free-text **custom** type.
 
 Fields are displayed two ways, by element kind:
 

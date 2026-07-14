@@ -131,8 +131,8 @@ read models, external events, screens, and automations.
 
 1. Select a block on the board; the Fields tab shows its type and fields.
 2. **+ Add field** appends a row. Each row is a **name** input and a **type**
-   picker — string, number, date, time, date-time, UUID, or **custom** (which
-   reveals a free-text type-name input). **×** removes the row.
+   picker — string, number, boolean, date, time, date-time, UUID, or **custom**
+   (which reveals a free-text type-name input). **×** removes the row.
 3. Changes save immediately.
 
 Where fields appear on the board:

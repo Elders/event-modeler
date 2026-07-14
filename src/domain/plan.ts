@@ -53,7 +53,15 @@ export interface PlannedField {
   type: FieldType;
 }
 
-const PLAN_FIELD_TYPES: FieldType[] = ['string', 'number', 'date', 'time', 'datetime', 'uuid'];
+const PLAN_FIELD_TYPES: FieldType[] = [
+  'string',
+  'number',
+  'boolean',
+  'date',
+  'time',
+  'datetime',
+  'uuid',
+];
 
 export interface PlannedBlock {
   ref: string;
