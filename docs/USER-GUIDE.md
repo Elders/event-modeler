@@ -1,0 +1,264 @@
+# Event Modeler — User Guide
+
+How to use the Event Modeler app on a Miro board: what event modeling is, what
+every control does, and how the pieces work together.
+
+---
+
+## 1. What is event modeling?
+
+[Event modeling](https://eventmodeling.org) is a way to blueprint an
+information system: instead of boxes-and-arrows architecture diagrams, you
+describe **how information flows through the system over time**. A model reads
+left to right like a movie storyboard.
+
+The vocabulary is small and color-coded — practitioners read models by color,
+so the colors are fixed:
+
+| Block | Color | Meaning |
+|---|---|---|
+| **Event** | 🟧 Orange | A fact — something that happened. The backbone of the timeline. |
+| **Command** | 🟦 Blue | An intent to change state ("Place order"). |
+| **Read model** | 🟩 Light green | Data prepared for a user or system to read ("Order list"). |
+| **External event** | 🟨 Yellow | A fact arriving from an outside system. |
+| **Error** | 🟥 Red | A rejected or failed outcome. Appears only inside specifications. |
+| **Note** | ⬜ Gray | A free-text annotation. Not part of the model's flow. |
+| **Automation** | ⚙️ Gear icon | A process that reacts to state and issues commands — no user involved. |
+| **Screen** | 🖼 Titled image | A UI the user interacts with — a sketch surface you draw on. |
+
+The conventional layout is **three horizontal lanes**, top to bottom:
+
+1. **Screens & automations** — the actors,
+2. **Commands & read models** — the requests and views,
+3. **Events** — the timeline of facts,
+
+with **time flowing left to right**. Vertical **slices** carve this timeline
+into atomic features; **chapters** above the model group slices into larger
+contexts.
+
+Because the color *is* the type, any plain Miro sticky in one of these colors
+is recognized as its block — you can keep sketching with Miro's native sticky
+tool and the app understands the result.
+
+---
+
+## 2. Getting started
+
+1. Open a Miro board where the Event Modeler app is installed.
+2. Click the app's icon in Miro's left toolbar — the panel opens.
+3. The panel has three tabs: **Build** (the manual palette), **Fields** (the
+   data editor for the selected block), and **Generate** (draft a model from
+   text with AI).
+
+The app is an assistant, not a replacement for Miro: everything it places is
+an ordinary Miro item afterward. You move, resize, relabel, restyle, connect,
+and delete with Miro's own tools. In particular, **arrows between blocks are
+drawn with Miro's native connector tool** — the app has no linking feature of
+its own.
+
+Some behaviors (spec upkeep, the completeness check, on-board buttons) run in
+the background the whole time the board is open, even with the panel closed.
+
+---
+
+## 3. The Build tab
+
+### 3.1 Building blocks
+
+A grid of tiles, one per block plus three tool structures. Two gestures:
+
+- **Drag** a tile onto the board → the element is created where you drop it.
+- **Click** a tile → the element is created at the center of your current view.
+
+The view never zooms or jumps when the app places something; at most it
+expands to keep new content visible.
+
+| Tile | What you get |
+|---|---|
+| **Event / Command / Read model / External event / Error / Note** | A colored sticky with the block name as its text. Rename it by editing the sticky's first line. |
+| **Automation** | A gear icon with an editable title above it, grouped to move as one. |
+| **Screen** | An editable title above a dashed white sketch surface, grouped to move as one. Draw your UI over it with Miro's pen/shapes, or link it into flows like any block. |
+| **Slice** | A transparent frame sized to span the three lanes. **Click behaves specially:** with elements selected, the slice wraps *around your selection*; with nothing selected (or on drag), you get a default-size slice. Elements inside a slice move with it. |
+| **Specification** | A Given/When/Then frame (see §6). **Click behaves specially:** with a slice selected, the spec attaches beneath that slice and takes its name; otherwise it appears standalone at the view center. |
+| **Swimlane** | One horizontal lane guide. Place three and label them "Screens", "Commands & read models", "Events" for the conventional layout. Guides are pure decoration — nothing snaps to them. |
+| **Chapter** | A thick blue horizontal arrow with an editable caption riding on the line. Place it *above* the model to mark a stretch of the timeline as one context; optionally stack narrower chapter arrows beneath it as sub-chapters. |
+
+### 3.2 Pattern stamps
+
+One click inserts a ready-made, pre-linked group of blocks for a recurring
+event-modeling pattern, laid out in the conventional lanes:
+
+| Stamp | Flow | When to use |
+|---|---|---|
+| **State change** | Screen → Command → Event | The basic write path: a user acts on a screen. |
+| **State view** | Event → Read model → Screen | The basic read path: an event feeds what a screen shows. |
+| **Automation** | Read model → Automation → Command → Event | A process reacts to state, no user involved. |
+| **Translation** | External event → Automation → Command → Event | Absorb an outside system's event into your model. |
+| **Processor todo-list** | Command → Event → Read model → Automation → Command → Event | An event queues work; an automation works items off and the closing event marks them done. |
+| **Reservation** | Command → Event → Read model → Automation → Command → Event | Tentatively hold a limited resource, then confirm. |
+| **Lookup table** | Screen ← Read models ← Events | A screen backed by several read models, each hydrated by its own event. |
+| **Projected read model** | Command → Event → Read model | A write that is immediately projected into a view. |
+
+**Anchoring:** if you have exactly **one** block selected whose type appears in
+the pattern, the stamp builds *around it* — your block is reused as the
+matching node and only the missing pieces are added. With no matching
+selection, the pattern lands at the view center.
+
+Stamped arrows use Miro's default connector style, indistinguishable from ones
+you draw yourself.
+
+### 3.3 Convert
+
+This section reacts to your selection. Select one or more **plain frames**
+(drawn with Miro's own frame tool) and it offers **Slice** / **Spec** buttons
+to adopt them as app-managed structures.
+
+Sticky notes never need converting — their fill color already sets their block
+type. A plain orange sticky *is* an event as far as the app is concerned.
+
+---
+
+## 4. The Fields tab
+
+Fields are the data a block carries — the payload that flows through the
+model. Every block except errors and notes can carry them: commands, events,
+read models, external events, screens, and automations.
+
+1. Select a block on the board; the Fields tab shows its type and fields.
+2. **+ Add field** appends a row. Each row is a **name** input and a **type**
+   picker — string, number, date, time, date-time, UUID, or **custom** (which
+   reveals a free-text type-name input). **×** removes the row.
+3. Changes save immediately.
+
+Where fields appear on the board:
+
+- **Stickies** — fields render as lines in the sticky's own text, one
+  `name : type` per line below the block's name. The first line stays the
+  name, so renaming the sticky natively just works. You can also **type field
+  lines directly on the sticky** — the app parses them back; your on-board
+  edits win and are never overwritten.
+- **Screens & automations** — an image has no text, so fields render in a
+  small box attached beneath the element, grouped to travel with it. If the
+  box is ever lost (e.g. a frame resize swallowed it), the app rebuilds it
+  automatically within a few seconds.
+
+---
+
+## 5. The completeness check (why an arrow turns red)
+
+Fields let the app verify that information actually *flows*. Continuously, in
+the background:
+
+> For every arrow, the **source** block must supply every field the **target**
+> block declares — matched by name **and** type.
+
+An arrow whose source is missing any of its target's fields turns **red**.
+Fix it by adding the missing field to the source (or removing/renaming it on
+the target), and the arrow returns to exactly the color it had before —
+usually within a few seconds.
+
+Notes: arrows into a target with no fields are never flagged; arrows with a
+loose (unattached) end are ignored; a field with the right name but the wrong
+type counts as missing. The check runs whether or not the panel is open.
+
+---
+
+## 6. Specifications (Given / When / Then)
+
+A specification documents one behavioral scenario: a titled frame with three
+zones — **Given** (the events that already happened), **When** (the command),
+**Then** (the expected events or errors).
+
+**Creating one** — three ways:
+
+- Click the **Specification** tile (standalone, at the view center).
+- Select a slice, then click the **Specification** tile — it attaches beneath
+  the slice and is titled after it.
+- Click the **＋ button docked to a slice's bottom edge** — same result,
+  without opening the panel. Multiple specs under one slice stack downward,
+  never overlapping.
+
+**Filling the zones with copies.** Originals never move into a spec. Each zone
+has its own on-board **＋ button**:
+
+1. Click a zone's **＋** — a toast confirms, e.g. *"Now select the items to
+   copy into Given."* The zone is now armed.
+2. Select one or more stickies anywhere on the model (multi-select works).
+   Copies of them appear in the armed zone, laid out in a grid.
+3. Selecting something that isn't a sticky shows a warning and keeps the zone
+   armed; clicking empty canvas disarms it.
+
+**About copies:**
+
+- A copy is a **real, typed, editable block** — not a snapshot. Edit its label,
+  give it its own fields; it's yours.
+- Each copy links back to its original, so you can always navigate to the
+  source.
+- Only **color** follows the original (recolor the original and its copies
+  follow). Labels and fields never sync in either direction; deleting a copy
+  removes just the copy; deleting an original leaves its copies as they are.
+- Failure cases appear as **red error stickies in the Then zone** — the only
+  place errors belong in an event model.
+
+**Resizing:** drag the spec frame wider or narrower and the copies re-grid to
+fit, zones recompute their heights, and the frame grows downward as needed —
+automatically.
+
+**Deleting:** delete the spec frame and the app cleans up everything that
+belonged to it (labels, buttons, copies) — no debris left behind.
+
+---
+
+## 7. The Generate tab (AI drafting)
+
+Paste a prose description of a system — the app has Claude draft a complete
+model: slices along a timeline, typed blocks in their lanes, the arrows
+between them, fields on every block, and Given/When/Then specs per slice.
+
+**One-time setup:** open **Settings** at the bottom of the tab and paste your
+Anthropic API key (get one at console.anthropic.com). The key is stored **only
+in your browser** — never on the board, never visible to other board members.
+Pick a model from the dropdown; the default is the most capable.
+
+**Using it:**
+
+1. Paste or type a description into the text box — e.g. *"A customer places an
+   order, payment is taken, the order is shipped…"*. More detail yields a
+   richer model.
+2. Click **Generate model**. Planning takes a little while (the AI call), then
+   blocks appear slice by slice. Generation deliberately paces itself to
+   respect Miro's rate limits, so a large model builds steadily rather than
+   all at once.
+3. **Pause** stops the build gracefully at the next block boundary.
+
+**Resuming:** a paused, interrupted, or failed build is checkpointed on the
+board after every step. Reopen the panel any time (even after a reload) and a
+banner shows the progress — e.g. *"Generation paused — 3 of 7 slices done."* —
+with **Resume** (continue exactly where it stopped, no duplicates) and
+**Discard** (drop the checkpoint) buttons. An unfinished checkpoint expires by
+itself after 24 hours.
+
+Everything generated is ordinary, fully editable model content — same as if
+you had placed it by hand.
+
+---
+
+## 8. Tips & troubleshooting
+
+- **An arrow turned red** — that's the completeness check (§5): the source
+  block doesn't carry every field its target declares. Compare their fields;
+  match names *and* types.
+- **Something didn't update immediately** — background upkeep (spec re-layout,
+  field-box healing, arrow recoloring) runs on a few-seconds cycle. Give it a
+  moment before assuming something's wrong.
+- **The panel closed but buttons still work** — by design. The on-board ＋
+  buttons, copy flow, completeness check, and spec upkeep run for the whole
+  board session.
+- **Use native Miro freely** — recolor, restyle, move, group, delete. The app
+  never fights Miro. A plain sticky in a model color is a real block; a plain
+  frame can be adopted via **Convert** (§3.3).
+- **Don't look for a linking feature** — connect blocks with Miro's own
+  connector tool (hover a sticky's edge and drag). The app only draws arrows
+  inside pattern stamps and generated models.
+- **Sticky text is the source of truth for its fields** — feel free to edit
+  `name : type` lines right on a sticky; the Fields tab picks the edits up.

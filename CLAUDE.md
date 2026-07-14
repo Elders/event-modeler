@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm start` / `npm run dev` — Vite dev server on port 3000 (the app's registered App URL).
 - `npm run typecheck` — `tsc` only.
 
-Git: commit messages must NOT contain `Co-Authored-By` or any AI-attribution trailer (user rule).
+Git: commit messages must NOT contain `Co-Authored-By` or any AI-attribution trailer (user rule). **master is production** — every push auto-deploys to GitHub Pages via `.github/workflows/deploy.yml`; develop on the `preview` branch and merge to master only to ship.
 
 To see changes in Miro: the app must be registered once (README has the steps; App URL `http://localhost:3000`, scopes `boards:read` + `boards:write`). After panel changes, close and reopen the panel; after changes to `src/index.ts` or anything it pulls in (the features/adapters it wires), the whole **board tab must be refreshed** — the headless page only reloads with it. One-time listener registrations are guarded by `window` flags and survive HMR. `Miro creds.txt` in the root holds credentials; never read, modify, or commit it.
 
@@ -54,10 +54,12 @@ dependency order (each may import only from layers below it):
 - Frame children use parent-top-left-relative coordinates. The adapter's convention: create at absolute coords, then `addToContainer` re-sets relative coords and `sync()`s. Items created over a frame may get auto-captured with shifted coords — `MiroCanvas.settle` (the `canvas.settle` port op) re-pins them; a non-capturing canvas no-ops it.
 - Sticky `fillColor` is a fixed palette; the four model colors (`orange`, `blue`, `light_green`, `yellow`, plus `red` for errors) are native values. Shape text does NOT scale on resize — scalable graphics are inline SVGs shipped as base64 data URLs (`createImage`).
 - Every awaited SDK call is a round-trip (~tens of ms). Batch independent creations with `Promise.all` (spec creation does this); sequential chains of 20+ calls feel slow to the user. **But** Miro rate-limits writes (HTTP 429): a single user action is fine, but a *bulk* op that bursts dozens of creates trips it. So `MiroCanvas` wraps every write (creates, `sync`, `add`, `setMetadata`) in `withRetry` backoff, and bulk callers like `generate` create **sequentially** instead of `Promise.all`. Per-action features keep using `Promise.all`.
+- **Board app data has a tight total budget** — writes failed at a measured ~31 KB across all `em-*` keys. Keep registries lean: no per-field ids, no sticky field records (parsed from the sticky's text on demand), and the `em-gen` checkpoint auto-expires after 24h. Size-measuring snippet and breakdown in [docs/DECISIONS.md](docs/DECISIONS.md).
+- Failed `eventhub.eu01.miro.com` requests in devtools are Miro telemetry blocked by ad-blockers/VPNs — **not** the app's rate limit; don't diagnose from them. The real signal is a REST 429 from `api.miro.com` (details in [docs/DECISIONS.md](docs/DECISIONS.md)).
 
 ## Product decisions (do not regress)
 
-These came from explicit user feedback; details in the auto-memory file `miro-event-modeler-ux-prefs.md`:
+These came from explicit user feedback; fuller context (what was tried and rejected, and why) in [docs/DECISIONS.md](docs/DECISIONS.md):
 
 - Never auto-zoom on creation. `ensureVisible` only expands the viewport, never zooms in.
 - Connectors use SDK defaults — zero shape/style overrides. No arrow-styling features.
@@ -65,5 +67,6 @@ These came from explicit user feedback; details in the auto-memory file `miro-ev
 - Lean panel: no app-name header, no close button, no redundant controls. On-board affordances (the + buttons) are preferred over panel buttons for board-targeted actions.
 - Screens and automations are grouped title-text + image pairs — not frames (connectors), not shapes (text scaling, accidental text-edit). Slices and specs are frames (containment is the point).
 - Don't decorate frames with child shapes (a slice border attempt hid the frame title).
+- Chapters are single blue connectors (`#61DEFF`, caption above the line) placed above the model to group slices into contexts; sub-chapters are optional narrower arrows beneath a chapter — many chapters stand alone.
 - Spec copies are **typed, editable blocks**, not frozen pictures: a copy carries its source's type (so the Fields editor recognizes it and it can hold its own fields), keeps a navigable back-link to the original, and is the user's to edit. Only **color** propagates original→copy — never label, text, or fields — and never the reverse (`syncSpecCopies`).
 - Fields: errors can't carry fields (product decision). Cards embed their fields in their own text (first line = the name, so a native rename just edits it); screens/automations get an attached box beneath them, grouped so it travels with the element. **Stickies keep no registry record** — their fields live in the sticky's own text and are parsed from it on demand (the panel editor and the completeness check both read the board, never a stored copy). Only **box-mode** screens/automations keep an `em-fields` record, because their fields render into a *separate* box shape that a frame-shrink can evict or delete, and the record is what lets housekeeping rebuild it. The completeness check reads fields straight from the notes/boxes, so it never depends on the registry; arrows recolor on a ~4s headless poll, nudged immediately after a panel field edit.
