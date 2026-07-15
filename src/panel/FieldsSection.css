@@ -1,5 +1,7 @@
-/* The Fields editor: a column of field rows (name + type, plus a custom-type
-   input when the type is "custom") and an add button. */
+/* The Fields editor: a column of field rows (grip + name + type, plus a
+   custom-type input when the type is "custom") and an add button. Rows
+   reorder by dragging the grip; the insertion point renders as a line in
+   the gap between rows (pseudo-elements, so no layout shift while dragging). */
 
 .fields-list {
   display: flex;
@@ -9,12 +11,60 @@
 }
 
 .field-row {
+  position: relative; /* anchors the drop-indicator pseudo-elements */
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   /* tighter wrap inside a row than between rows, so custom rows read as one unit */
   row-gap: 4px;
+}
+
+.field-row.dragging {
+  opacity: 0.4;
+}
+
+.field-row.drop-before::before,
+.field-row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: #4262ff;
+}
+
+.field-row.drop-before::before {
+  top: -6px; /* centered in the 10px list gap */
+}
+
+.field-row.drop-after::after {
+  bottom: -6px;
+}
+
+.field-grip {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--em-hint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: grab;
+}
+
+.field-grip:hover,
+.field-grip:focus-visible {
+  color: var(--em-ink);
+  background: var(--em-line);
+}
+
+.field-grip:active {
+  cursor: grabbing;
 }
 
 .field-input {

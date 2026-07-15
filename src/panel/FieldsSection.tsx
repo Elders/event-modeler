@@ -1,7 +1,8 @@
 // The Fields editor: reacts to the board selection and lets the user define
 // fields on the selected block. Resolves the first fieldable element in the
 // selection (a screen's box/title share the group, so we scan past them via
-// each item's meta), shows a name input + type picker per field, and persists
+// each item's meta), shows a grip + name input + type picker per field —
+// rows reorder by dragging the grip (or arrow keys on it) — and persists
 // every change through the fields use-case. Persistence is serialized in
 // features/fields/edit, so we save optimistically without a busy lock.
 
@@ -21,6 +22,7 @@ import {
   type FieldType,
 } from '../features/fields/model';
 import { services } from '../services';
+import { useDragReorder } from './useDragReorder';
 import { useSelection } from './useSelection';
 
 function blockLabel(type: BlockType): string {
@@ -119,6 +121,28 @@ export function FieldsSection() {
     if (target) void saveFields(target.id, target.type, fields).then(nudgeCompleteness).catch(reportError);
   };
 
+  // Reorder: move one field to a new position and write through like any edit.
+  const reorder = useDragReorder(fields.length, (from, to) => {
+    const next = [...fields];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    save(next);
+  });
+
+  // Row classes for the drag visuals: dim the dragged row, and mark the row
+  // whose edge shows the insertion line — suppressed when the drop slot would
+  // put the row right back where it is.
+  const rowClass = (index: number, count: number) => {
+    const { dragIndex, dropIndex } = reorder;
+    let cls = 'field-row';
+    if (dragIndex === index) cls += ' dragging';
+    if (dragIndex === null || dropIndex === null) return cls;
+    if (dropIndex === dragIndex || dropIndex === dragIndex + 1) return cls;
+    if (dropIndex === index) cls += ' drop-before';
+    else if (dropIndex === count && index === count - 1) cls += ' drop-after';
+    return cls;
+  };
+
   if (!target) {
     return (
       <section className="section">
@@ -136,9 +160,18 @@ export function FieldsSection() {
       <h2 className="section-title">Fields</h2>
       <p className="section-sub">{blockLabel(target.type)}</p>
 
-      <div className="fields-list">
-        {fields.map((field) => (
-          <div className="field-row" key={field.id}>
+      <div className="fields-list" {...reorder.listProps}>
+        {fields.map((field, index) => (
+          <div className={rowClass(index, fields.length)} key={field.id} {...reorder.rowProps(index)}>
+            <button
+              className="field-grip"
+              type="button"
+              aria-label="Move field (drag, or arrow keys)"
+              title="Drag to reorder"
+              {...reorder.handleProps(index)}
+            >
+              ⠿
+            </button>
             <input
               className="field-input field-name"
               placeholder="name"
