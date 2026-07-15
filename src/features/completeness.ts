@@ -1,9 +1,9 @@
 // The information-completeness pass, run from the headless board script: it
-// validates that every field-bearing element has its fields provided by the
-// elements pointing into it, which supply them together — when their pooled
-// fields don't cover the target's (matched by name and type), every arrow into
-// that target reddens and is captioned with the fields nobody supplies. There
-// are no connector events, so it polls — the flagging is reconciled against a
+// validates that every field-bearing element has its required fields provided by
+// the elements pointing into it, which supply them together — when their pooled
+// required fields don't cover the target's (matched by name and type), every
+// arrow into that target reddens and is captioned with the shortfall. There are
+// no connector events, so it polls — the flagging is reconciled against a
 // registry of flagged connectors so a closed gap restores each arrow to the
 // exact color it had before and takes the caption back off.
 //

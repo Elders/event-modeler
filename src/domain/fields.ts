@@ -72,9 +72,10 @@ export function fieldTypeLabel(field: Field): string {
   return field.type;
 }
 
-// The name+type identity of a field, ignoring optionality: "name : type".
-// The completeness check matches fields on this key, so an optional source
-// field still supplies a required target field of the same name and type.
+// The name+type identity of a field, ignoring optionality: "name : type". The
+// completeness check matches fields on this key, but reads optionality
+// separately on both sides — an optional field neither has to be supplied nor
+// supplies anything.
 export function fieldMatchKey(field: Field): string {
   return `${field.name} : ${fieldTypeLabel(field)}`;
 }

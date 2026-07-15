@@ -138,9 +138,9 @@ where the pattern is most idiomatic, the rule was inverted at the user's
 request.
 
 Now the sources pointing into a target **pool** their fields, and the target is
-satisfied when the pool covers its required fields (name + type; optional
-fields exempt). When the pool falls short, **every** arrow into that target
-reddens — the shortfall belongs to the target's fan-in, not to any one arrow,
+satisfied when the pool covers its required fields (name + type; optionality
+handled per *Optional supplies nothing* below). When the pool falls short,
+**every** arrow into that target reddens — the shortfall belongs to the target's fan-in, not to any one arrow,
 and there is no honest way to pin it on one. Adding the missing field to any
 one source clears them all.
 
@@ -181,7 +181,9 @@ Settled with the user, don't churn these:
   block — but `htmlToLines` splits on both, so the parse side is shared.
 - **Bare keys, no prefix.** `total : number` — the red already says it's a
   problem, so no "Missing:" lead-in. Keys are the same `name : type` form used
-  on stickies and in the box, in the *target's* field order.
+  on stickies and in the box, in the *target's* field order. The one exception
+  is a field the fan-in carries only as optional, which is worded as a sentence
+  — see *Optional supplies nothing* below.
 - **Hand-written captions are not protected.** The caption array is replaced
   outright; a caption you typed on an arrow that later reddens is destroyed and
   is *not* restored when the gap closes. The user explicitly declined the
@@ -207,6 +209,53 @@ Two implementation constraints, both load-bearing:
 
 Chapter arrows are safe from all of this — they're free-standing (endpoints are
 positions, not items), so the rule skips them and their captions are untouched.
+
+### Optional supplies nothing (2026-07-15)
+
+Optionality started out as a target-side exemption only: an optional field on a
+block didn't have to be supplied, but an optional field on a *source* still
+counted as supply, because `fieldMatchKey` strips the `?` and both sides were
+compared on the bare key. So `email : string?` on an event satisfied a read
+model requiring `email : string`, and the arrow stayed black.
+
+That's backwards. A field that may be absent cannot guarantee one that must be
+present — the black arrow was promising something the model didn't say. At the
+user's request the check now reads optionality on **both** sides: an optional
+target field still needs no supplier, and an optional source field supplies
+nobody.
+
+- **A required supply anywhere in the fan-in wins.** If one source carries
+  `email : string` required and another carries it optionally, the target is
+  satisfied — the required one is enough on its own, and pooling is unchanged.
+- **The two sets collapsed into one.** With optional exempt on the target and
+  inert on the source, "what a target requires" and "what a source supplies" are
+  the same computation — the non-optional keys. `completenessGaps` keeps a
+  second `optionalById` map, but it satisfies nothing; it exists only to word
+  the caption.
+
+**The caption distinguishes the two kinds of gap**, which is the one place this
+rule is visible rather than merely correct:
+
+- A field nothing carries at all stays the bare key: `phone : string`.
+- A field the fan-in *does* carry, but only optionally, reads
+  `Field "email : string" is required`. Listing it as absent would read as a lie
+  — it's right there on the upstream block. The sentence names what's actually
+  wrong.
+- **The full key goes in the quotes, not the name**, because a type mismatch is
+  also a gap: a source carrying `email : number` against a target requiring
+  `email : string` would make `Field "email" is required` read as false.
+- Both formats can therefore appear in one caption, since a target can be short
+  of both kinds at once. Uniform wording for every gap was considered and
+  declined — the sentence carries information the bare key doesn't, and only
+  where it applies.
+
+`gapLines` is the single place the wording lives, shared by `gapCaption` and
+`captionShowsGap` — if those two ever disagreed about what a caption should say,
+the no-write-on-a-stable-board invariant above would break and the poll would
+rewrite the line every 4s forever.
+
+The planner prompt teaches the rule too (never introduce a field as optional
+upstream and then require it downstream), or generated models come out red.
 
 ## Platform constraints (learned the hard way)
 
