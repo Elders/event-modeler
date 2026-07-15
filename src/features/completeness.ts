@@ -16,7 +16,7 @@ import { parseBoxFields } from '../domain/fields';
 import { FLAGS_KEY, type ConnectorFlag } from '../domain/records';
 import type { CanvasConnector, CanvasElement } from '../ports/canvas';
 import { services } from '../services';
-import { stickyFields } from './fields/board';
+import { fieldsBoxAmong, stickyFields } from './fields/board';
 
 // Miro's red; the default we fall back to if a flagged connector somehow had no
 // stroke color to remember.
@@ -102,9 +102,10 @@ async function checkCompleteness(): Promise<void> {
 // group, and a connector can attach to the group id or any member — none of
 // which is the fielded image — so endpoints are remapped to the group's lone
 // image member (registry-free, so it works before the panel has synced). The
-// reads are batched to a fixed few calls: the groups, all grouped members at
-// once (which also yields each group's box content), then the remaining sticky
-// endpoints in one fetch.
+// reads are batched to a fixed few calls — the groups, all grouped members at
+// once (which also yields each group's shape contents), then the remaining
+// sticky endpoints in one fetch — plus one metadata read per shape grouped
+// with a *connected* screen, to pick the tagged fields box among them.
 async function analyze(
   connectors: CanvasConnector[],
 ): Promise<{ resolved: CanvasConnector[]; elements: FieldedElement[] }> {
@@ -116,7 +117,7 @@ async function analyze(
   );
 
   const toImage = new Map<string, string>(); // group id / any member → fielded image
-  const boxByImage = new Map<string, CanvasElement>(); // fielded image → its box shape
+  const shapesByImage = new Map<string, CanvasElement[]>(); // fielded image → grouped shape candidates
   for (const group of groups) {
     const members = group.members
       .map((id) => membersById.get(id))
@@ -125,8 +126,8 @@ async function analyze(
     if (!image) continue; // a plain user grouping, not a screen/automation
     toImage.set(group.id, image.id);
     for (const id of group.members) toImage.set(id, image.id);
-    const box = members.find((member) => member.kind === 'shape');
-    if (box) boxByImage.set(image.id, box);
+    const shapes = members.filter((member) => member.kind === 'shape');
+    if (shapes.length > 0) shapesByImage.set(image.id, shapes);
   }
 
   const resolved = connectors.map((connector) => ({
@@ -144,7 +145,12 @@ async function analyze(
   const elements: FieldedElement[] = [];
   const stickyIds: string[] = [];
   for (const id of endpointIds) {
-    const box = boxByImage.get(id); // an image endpoint reads from its captured box
+    // An image endpoint reads from its attached box — but only the shape that
+    // carries the fields-box tag counts. A user-drawn shape grouped with the
+    // screen must not contribute "fields". Resolved here, per endpoint, so the
+    // tag reads stay proportional to connected screens, not to every group.
+    const candidates = shapesByImage.get(id);
+    const box = candidates ? await fieldsBoxAmong(candidates) : null;
     if (box) {
       const fields = parseBoxFields(box.content);
       if (fields.length > 0) elements.push({ id, fields });

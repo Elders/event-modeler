@@ -11,9 +11,23 @@ import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
 import { isFieldable } from './model';
 
-// An element's attached fields box: the known box if it still exists, otherwise
-// the lone shape among the element's group members (a screen or automation is an
-// image + title text + box shape, so the shape is the box).
+// The shape among `candidates` that carries the fields-box tag, or null. Only a
+// tagged shape is ever treated as a fields box: a user-drawn shape grouped with
+// the same element must never be mistaken for one — it would get parsed as
+// fields, rewritten, resized, re-docked, and eventually evicted.
+export async function fieldsBoxAmong(candidates: CanvasElement[]): Promise<CanvasElement | null> {
+  const { canvas } = services();
+  for (const candidate of candidates) {
+    if (candidate.kind !== 'shape') continue;
+    const meta = await canvas.getMeta(candidate.id);
+    if (meta?.type === 'fields-box') return candidate;
+  }
+  return null;
+}
+
+// An element's attached fields box: the known box if it still exists (the id
+// comes from the registry, which only ever points at app-created boxes), else
+// the tagged shape among the element's group members.
 export async function findFieldsBox(
   elementId: string,
   knownBoxId: string | null = null,
@@ -25,8 +39,7 @@ export async function findFieldsBox(
   }
   const memberIds = (await canvas.groupMembers(elementId)).filter((id) => id !== elementId);
   if (memberIds.length === 0) return null;
-  const members = await canvas.get(memberIds);
-  return members.find((member) => member.kind === 'shape') ?? null;
+  return fieldsBoxAmong(await canvas.get(memberIds));
 }
 
 // The fields a sticky displays in its own text, or [] if it isn't a fieldable

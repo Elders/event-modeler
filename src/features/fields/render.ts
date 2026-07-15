@@ -99,6 +99,9 @@ async function upsertBox(
     textAlign: 'center',
     textAlignVertical: 'middle',
   });
+  // Tag the box so the recovery scan and the completeness check can tell it
+  // apart from a user-drawn shape grouped with the same element.
+  await canvas.setMeta(box.id, { type: 'fields-box' });
   // Group the box with the element *and its existing group members* — a screen
   // or automation is already a title+image group, so grouping the box with the
   // image alone would split the image out and orphan the title. Re-grouping the

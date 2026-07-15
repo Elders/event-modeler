@@ -155,7 +155,9 @@ Where fields appear on the board:
   it automatically within a few seconds. Deleting every line clears the
   block's fields, just like on a sticky, and the now-empty box is removed
   automatically a few seconds later — the same end state as clearing the
-  fields from the panel.
+  fields from the panel. Your own shapes are safe: the app recognizes its
+  fields box by an internal tag, so a shape you drew and grouped with a
+  screen is never touched.
 
 ---
 

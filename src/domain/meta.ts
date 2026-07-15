@@ -14,4 +14,9 @@ export type ElementMeta =
   // The on-canvas "+" button that arms a specification zone for copying.
   | { type: 'spec-add'; zone: SpecZoneId; spec: string }
   // The on-canvas "+" button affixed to a slice that adds a spec beneath it.
-  | { type: 'slice-add-spec'; slice: string };
+  | { type: 'slice-add-spec'; slice: string }
+  // The attached box that displays a screen's/automation's fields. The tag is
+  // what tells the app's own box apart from a user-drawn shape grouped with
+  // the same element — only a tagged shape may ever be treated (rewritten,
+  // resized, re-docked, evicted) as a fields display.
+  | { type: 'fields-box' };

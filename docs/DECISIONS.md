@@ -114,6 +114,16 @@ truth; the registry follows.** Concretely, for box mode:
 The record's remaining job is exactly what frames made necessary (see below):
 being the rebuild memory for a box a frame-shrink evicted or deleted.
 
+**The box is identified by a `fields-box` metadata tag, never inferred by
+kind.** The first cut recognized "the shape grouped with the element" as the
+box, which hijacked any user-drawn shape sharing the group: its text parsed
+as fields, then the app rewrote, resized, re-docked, and eventually evicted
+it. Now the box is tagged at creation; the recovery scan and the completeness
+check accept only tagged shapes (the registry's `card` id stays trusted as
+app-written); and housekeeping stamps the tag onto boxes created before
+tagging existed, via their registry record, so old boards converge on their
+first pass.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)

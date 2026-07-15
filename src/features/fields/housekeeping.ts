@@ -12,6 +12,12 @@ import { removeFieldsDisplay, renderFields } from './render';
 
 let running = false;
 
+// Boxes verified to carry the fields-box tag, checked once per page session.
+// Registry cards are app-written, so a record's box that predates tagging is
+// stamped on sight — this migration is what lets the tag-gated lookups
+// (recovery scan, completeness) recognize boxes created before the tag existed.
+const knownTagged = new Set<string>();
+
 export async function fieldsHousekeeping(): Promise<void> {
   if (running) return;
   running = true;
@@ -71,6 +77,12 @@ async function doFieldsHousekeeping(): Promise<void> {
         continue;
       }
       survivors.push(record);
+      if (!knownTagged.has(box.id)) {
+        if ((await canvas.getMeta(box.id))?.type !== 'fields-box') {
+          await canvas.setMeta(box.id, { type: 'fields-box' });
+        }
+        knownTagged.add(box.id);
+      }
       if (!sameFields(parsed, record.fields)) {
         record.fields = parsed;
         dirty = true;
