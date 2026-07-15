@@ -51,6 +51,8 @@ const DEFAULT_LANE: Record<PlannableBlockType, PlanLane> = {
 export interface PlannedField {
   name: string;
   type: FieldType;
+  // Rendered as "name : type?" and exempt from the completeness check.
+  optional?: boolean;
 }
 
 const PLAN_FIELD_TYPES: FieldType[] = [
@@ -154,6 +156,8 @@ function isStickyType(
 }
 
 // Keep only well-formed fields: a non-empty name and one of the concrete types.
+// `optional` is kept only when strictly true (never a stored `false`/undefined),
+// matching the lean shape storableField persists.
 function normalizeFields(raw: unknown): PlannedField[] {
   const fields: PlannedField[] = [];
   for (const rawField of asArray(raw)) {
@@ -161,7 +165,7 @@ function normalizeFields(raw: unknown): PlannedField[] {
     const name = asString(f.name);
     const type = asString(f.type) as FieldType;
     if (!name || !PLAN_FIELD_TYPES.includes(type)) continue;
-    fields.push({ name, type });
+    fields.push(f.optional === true ? { name, type, optional: true } : { name, type });
   }
   return fields;
 }

@@ -156,6 +156,9 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
             id: newFieldId(),
             name: field.name,
             type: field.type,
+            // Spread rather than `optional: field.optional` — the record rides
+            // the em-gen checkpoint, and the app-data store rejects undefined.
+            ...(field.optional ? { optional: true } : {}),
           })),
           card: null,
         };
