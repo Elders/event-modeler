@@ -1,10 +1,10 @@
 // The information-completeness pass, run from the headless board script: it
 // validates that every field-bearing element has its fields provided by the
-// elements pointing into it, reddening each individual arrow whose source
-// doesn't carry all of the target's fields (matched by name and type). There
-// are no connector events, so it polls — the reddening is reconciled against a
-// registry of flagged connectors so a closed gap restores the arrow to the
-// exact color it had before.
+// elements pointing into it, which supply them together — when their pooled
+// fields don't cover the target's (matched by name and type), every arrow into
+// that target reddens. There are no connector events, so it polls — the
+// reddening is reconciled against a registry of flagged connectors so a closed
+// gap restores each arrow to the exact color it had before.
 //
 // Fields are read from what's drawn on the board (sticky text / attached box),
 // not the em-fields registry: the registry is a lazily-populated cache that can

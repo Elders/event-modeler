@@ -71,7 +71,8 @@ Later additions (2026-06-18):
 - **Fields are generated too.** The plan schema carries a `fields` array per
   block (name + concrete type); the system prompt teaches the vocabulary, the
   patterns, fields, and the completeness rule (keep a field's name + type
-  consistent along a flow so no arrow reddens).
+  consistent along a flow, and cover each block's required fields across its
+  incoming blocks between them, so no arrow reddens).
 - **Rate-limit pacing.** A whole model is write-heavy: `setBulkMode(true)`
   paces board writes (~500 ms/write, race-safe), bulk creates run sequentially,
   and the 429 backoff has a long tail. The build clears bulk mode in `finally`.
@@ -123,6 +124,38 @@ check accept only tagged shapes (the registry's `card` id stays trusted as
 app-written); and housekeeping stamps the tag onto boxes created before
 tagging existed, via their registry record, so old boards converge on their
 first pass.
+
+## Completeness is judged per target, not per arrow (2026-07-15)
+
+The first cut validated each arrow on its own: the source had to supply every
+field the target declared, regardless of what the other arrows into that target
+provided. That misreads the fan-in shape event modeling actually uses — a read
+model is routinely hydrated by several events, each carrying its own slice of
+the whole — so every arrow into such a read model reddened even though the
+model was, between them, fully populated. Since the false alarm fires exactly
+where the pattern is most idiomatic, the rule was inverted at the user's
+request.
+
+Now the sources pointing into a target **pool** their fields, and the target is
+satisfied when the pool covers its required fields (name + type; optional
+fields exempt). When the pool falls short, **every** arrow into that target
+reddens — the shortfall belongs to the target's fan-in, not to any one arrow,
+and there is no honest way to pin it on one. Adding the missing field to any
+one source clears them all.
+
+Two consequences, both accepted:
+
+- The red no longer pinpoints which path is deficient; it says "look at this
+  block and everything feeding it".
+- The rule is strictly looser. An arrow whose source supplies none of the
+  target's fields is now silent as long as its siblings cover everything.
+  Flagging a connector that contributes nothing would be a separate rule; it
+  was not asked for.
+
+**Known blind spot, deliberately left:** a block with required fields and *no*
+incoming arrows is the maximally incomplete case and shows nothing, because
+there is no arrow to redden. Reddening the block itself isn't available —
+red is already the error block type in the sticky vocabulary.
 
 ## Platform constraints (learned the hard way)
 

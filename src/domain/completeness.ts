@@ -1,11 +1,14 @@
 // Information-completeness check: a pure data-flow rule over the model. An
 // element that carries fields draws them from the elements pointing into it,
-// and each incoming arrow is validated on its own: the source must supply every
-// field the target declares, matched by name and type. An arrow whose source is
-// missing any of the target's fields — a differing type counts as missing — is
-// flagged, regardless of what other arrows into the same target provide. No
-// platform here: just the model graph and its fields, so it ports unchanged to
-// any canvas.
+// and the check is judged per *target*: everything pointing into a target pools
+// its fields, and the target is satisfied when that pool covers every field the
+// target declares, matched by name and type (a differing type counts as
+// missing). A read model hydrated by several events is the motivating case —
+// each event carries its own slice of the whole, and no single one has to carry
+// all of it. When the pool falls short, every arrow into that target is flagged:
+// the gap belongs to the target's fan-in, not to any one arrow, and closing it
+// on any one source clears them all. No platform here: just the model graph and
+// its fields, so it ports unchanged to any canvas.
 
 import { fieldMatchKey, type Field } from './fields';
 
@@ -33,13 +36,15 @@ function fieldKeys(fields: Field[]): Set<string> {
   );
 }
 
-// The ids of the connectors that should be flagged as incomplete. Each arrow is
-// judged on its own: the source must carry every field the target declares,
+// The ids of the connectors that should be flagged as incomplete. Each target
+// is judged once, over its whole fan-in: the sources pointing into it pool
+// their fields, and the pool must cover every field the target declares,
 // matched by name and type. Optional target fields (shown as "name : type?")
-// are exempt — they're optional, so no source has to supply them. An arrow
-// whose source lacks any of the target's required fields is returned —
-// independently of what other arrows into the same target supply. Arrows into
-// a target that carries no required fields are never flagged.
+// are exempt — they're optional, so nothing has to supply them. When the pool
+// falls short, every arrow into that target is returned, including arrows whose
+// own source supplies nothing: the shortfall is the target's, and there's no
+// one arrow to pin it on. Arrows into a target that carries no required fields
+// are never flagged.
 export function incompleteConnectors(
   elements: FieldedElement[],
   connectors: FlowConnector[],
@@ -51,16 +56,29 @@ export function incompleteConnectors(
       fieldKeys(element.fields.filter((field) => !field.optional)),
     ]),
   );
-  const none: Set<string> = new Set();
+
+  // Group the attached arrows by target. An arrow with an unattached endpoint
+  // carries no information, so it neither feeds a pool nor gets flagged.
+  const incomingByTarget = new Map<string, { id: string; start: string }[]>();
+  for (const { id, start, end } of connectors) {
+    if (!start || !end) continue;
+    const incoming = incomingByTarget.get(end);
+    if (incoming) incoming.push({ id, start });
+    else incomingByTarget.set(end, [{ id, start }]);
+  }
 
   const flagged = new Set<string>();
-  for (const connector of connectors) {
-    if (!connector.start || !connector.end) continue;
-    const required = requiredById.get(connector.end);
+  for (const [target, incoming] of incomingByTarget) {
+    const required = requiredById.get(target);
     if (!required || required.size === 0) continue;
-    const provided = providedById.get(connector.start) ?? none;
-    const complete = [...required].every((key) => provided.has(key));
-    if (!complete) flagged.add(connector.id);
+
+    const pooled = new Set<string>();
+    for (const { start } of incoming) {
+      for (const key of providedById.get(start) ?? []) pooled.add(key);
+    }
+
+    const complete = [...required].every((key) => pooled.has(key));
+    if (!complete) for (const { id } of incoming) flagged.add(id);
   }
   return flagged;
 }
