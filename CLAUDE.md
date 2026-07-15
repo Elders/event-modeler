@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm start` / `npm run dev` — Vite dev server on port 3000 (the app's registered App URL).
 - `npm run typecheck` — `tsc` only.
 
-Git: commit messages must NOT contain `Co-Authored-By` or any AI-attribution trailer (user rule). **master is production** — every push auto-deploys to GitHub Pages via `.github/workflows/deploy.yml`; develop on the `preview` branch and merge to master only to ship.
+Git: commit messages must NOT contain `Co-Authored-By` or any AI-attribution trailer (user rule). **Keep messages short** (user rule) — a subject line, and a body only when something genuinely won't survive without it. Ignore the long multi-paragraph bodies in `git log`; they are not the convention. Rationale, rejected alternatives and product decisions go in [docs/DECISIONS.md](docs/DECISIONS.md), which exists for exactly that. **master is production** — every push auto-deploys to GitHub Pages via `.github/workflows/deploy.yml`; develop on the `preview` branch and merge to master only to ship.
 
 To see changes in Miro: the app must be registered once (README has the steps; App URL `http://localhost:3000`, scopes `boards:read` + `boards:write`). After panel changes, close and reopen the panel; after changes to `src/index.ts` or anything it pulls in (the features/adapters it wires), the whole **board tab must be refreshed** — the headless page only reloads with it. One-time listener registrations are guarded by `window` flags and survive HMR. `Miro creds.txt` in the root holds credentials; never read, modify, or commit it.
 
