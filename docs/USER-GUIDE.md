@@ -147,9 +147,15 @@ Where fields appear on the board:
   lines directly on the sticky** — the app parses them back; your on-board
   edits win and are never overwritten.
 - **Screens & automations** — an image has no text, so fields render in a
-  small box attached beneath the element, grouped to travel with it. If the
-  box is ever lost (e.g. a frame resize swallowed it), the app rebuilds it
-  automatically within a few seconds.
+  small box attached beneath the element, grouped to travel with it. The box
+  is editable just like a sticky: **type `name : type` lines directly in it**
+  and the app adopts them — your on-board edits win and are never overwritten.
+  The box resizes itself to fit the lines within a few seconds.
+  If the box is ever lost (e.g. a frame resize swallowed it), the app rebuilds
+  it automatically within a few seconds. Deleting every line clears the
+  block's fields, just like on a sticky, and the now-empty box is removed
+  automatically a few seconds later — the same end state as clearing the
+  fields from the panel.
 
 ---
 
@@ -269,5 +275,6 @@ you had placed it by hand.
 - **Don't look for a linking feature** — connect blocks with Miro's own
   connector tool (hover a sticky's edge and drag). The app only draws arrows
   inside pattern stamps and generated models.
-- **Sticky text is the source of truth for its fields** — feel free to edit
-  `name : type` lines right on a sticky; the Fields tab picks the edits up.
+- **The board display is the source of truth for fields** — feel free to edit
+  `name : type` lines right on a sticky, or in a screen's/automation's
+  attached box; the Fields tab picks the edits up.

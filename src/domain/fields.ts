@@ -72,6 +72,22 @@ export function formatField(field: Field): string {
   return `${field.name} : ${fieldTypeLabel(field)}`;
 }
 
+// Whether two field lists carry the same fields in the same order — name, type,
+// and custom type name all equal. Ids are ignored: they're per-session edit
+// keys, not identity. Used to decide whether a board-side display and the
+// registry actually disagree before adopting or rewriting anything.
+export function sameFields(a: Field[], b: Field[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (field, index) =>
+        field.name === b[index].name &&
+        field.type === b[index].type &&
+        (field.customType ?? '') === (b[index].customType ?? ''),
+    )
+  );
+}
+
 // The sticky's full text: the block name on the first line, then — when there
 // are fields — a blank line and one paragraph per field. There is no delimiter;
 // the name is simply the first line, so a manual rename just edits it. Each part

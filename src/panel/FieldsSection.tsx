@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BLOCKS, type BlockType } from '../domain/vocabulary';
 import { completenessHousekeeping } from '../features/completeness';
 import { reportError } from '../features/helpers';
+import { findFieldsBox } from '../features/fields/board';
 import { setFields as saveFields } from '../features/fields/edit';
 import { resolveFieldTarget } from '../features/fields/recognize';
 import { syncFieldsFromBoard } from '../features/fields/sync';
@@ -62,25 +63,36 @@ export function FieldsSection() {
     };
   }, [selectionKey]);
 
-  // While a text-mode element stays selected, reflect edits made directly on the
-  // canvas: Miro fires no item-update event, so poll the element's text and
+  // While the target stays selected, reflect edits made directly on the board:
+  // Miro fires no item-update event, so poll the text that displays the fields —
+  // the sticky's own (text mode) or the attached box's (box mode) — and
   // reconcile when it changes. Skipped while a panel input is focused, so a
   // canvas poll can never clobber what the user is typing here.
   useEffect(() => {
-    if (!target || displayMode(target.type) !== 'text') return;
+    if (!target) return;
     const { id, type } = target;
     let stopped = false;
     let lastContent: string | null = null;
+    let boxId: string | null = null; // resolved lazily, then cached across ticks
+    const watched = async (): Promise<string | null> => {
+      if (displayMode(type) === 'text') {
+        const [element] = await services().canvas.get([id]);
+        return element?.content ?? null;
+      }
+      const box = await findFieldsBox(id, boxId);
+      boxId = box?.id ?? null;
+      return box?.content ?? null;
+    };
     const tick = async () => {
       const active = document.activeElement;
       if (active instanceof HTMLElement && active.classList.contains('field-input')) return;
-      const [element] = await services().canvas.get([id]);
-      if (stopped || !element || element.content === lastContent) return;
-      lastContent = element.content;
+      const content = await watched();
+      if (stopped || content === null || content === lastContent) return;
+      lastContent = content;
       const reconciled = await syncFieldsFromBoard(id, type);
       if (!stopped) setFields(reconciled);
     };
-    // Poll slowly: this only catches fields typed directly onto the sticky (the
+    // Poll slowly: this only catches fields typed directly on the board (the
     // panel inputs update immediately on their own), so a relaxed cadence keeps
     // it from being a constant drain on the shared API budget while selected.
     const timer = window.setInterval(() => void tick(), 2500);

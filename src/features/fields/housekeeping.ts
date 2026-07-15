@@ -1,18 +1,11 @@
 // The periodic background pass for fields, run from the headless board script:
-// cleans up after deleted elements, recreates boxes that were deleted or
-// evicted, re-docks boxes that drifted, and re-renders a display that no longer
-// matches the registry (a manual text edit, or a teammate's change). Polling is
-// the only option — there are no item-update or item-delete events.
+// cleans up after deleted elements, adopts manual edits of an attached box's
+// text into the registry, recreates boxes that were deleted or evicted, and
+// re-docks boxes that drifted. Polling is the only option — there are no
+// item-update or item-delete events.
 
-import {
-  FIELDS_BOX_GAP,
-  fieldsBoxHeight,
-  formatField,
-  htmlToLines,
-  type Field,
-} from '../../domain/fields';
+import { FIELDS_BOX_GAP, fieldsBoxHeight, parseBoxFields, sameFields } from '../../domain/fields';
 import { type FieldRecord } from '../../domain/records';
-import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
 import { displayMode, readFieldRecords, writeFieldRecords } from './model';
 import { removeFieldsDisplay, renderFields } from './render';
@@ -56,8 +49,54 @@ async function doFieldsHousekeeping(): Promise<void> {
       dirty = true;
       continue;
     }
-    survivors.push(record);
-    if (needsRender(record, element, record.card ? live.get(record.card) ?? null : null)) {
+    // Text-mode fields live in the sticky's own text and are user-authoritative;
+    // there is nothing here to heal.
+    if (displayMode(record.type) === 'text') {
+      survivors.push(record);
+      continue;
+    }
+
+    const box = record.card ? live.get(record.card) : undefined;
+    if (box && box.kind === 'shape') {
+      // The box's text is user-authoritative, like a sticky's: a manual edit on
+      // the board is adopted into the registry, never overwritten — including
+      // an emptied box, which clears the fields just as it would on a sticky.
+      const parsed = parseBoxFields(box.content, record.fields);
+      if (parsed.length === 0) {
+        // Emptied by hand: an empty box has nothing left to show, so evict it
+        // and drop the record — the same end state as clearing the fields from
+        // the panel.
+        await removeFieldsDisplay(record);
+        dirty = true;
+        continue;
+      }
+      survivors.push(record);
+      if (!sameFields(parsed, record.fields)) {
+        record.fields = parsed;
+        dirty = true;
+      }
+      // Fit and re-dock: size the box to the lines it actually shows (a manual
+      // edit changes the line count but Miro never resizes the shape) and keep
+      // it centered under the element. Size and position only — the content is
+      // never rewritten here, so an edit in progress can't be clobbered; the
+      // text normalizes on the next panel save.
+      const height = fieldsBoxHeight(parsed.length);
+      const y = element.y + element.height / 2 + FIELDS_BOX_GAP + height / 2;
+      if (
+        Math.abs(box.height - height) > 1 ||
+        Math.abs(box.x - element.x) > 1 ||
+        Math.abs(box.y - y) > 1
+      ) {
+        await canvas.apply([{ id: box.id, x: element.x, y, height }]);
+      }
+    } else if (record.fields.length === 0) {
+      // The box is gone and the record holds no fields — rebuilding would
+      // resurrect an empty box the user just deleted, so prune the record.
+      dirty = true;
+    } else {
+      survivors.push(record);
+      // The box was deleted or evicted (e.g. by a frame shrink) — rebuild it
+      // from the record; renderFields points record.card at the new box.
       const before = record.card;
       await renderFields(record, element);
       if (record.card !== before) dirty = true;
@@ -65,29 +104,4 @@ async function doFieldsHousekeeping(): Promise<void> {
   }
 
   if (dirty) await writeFieldRecords(survivors);
-}
-
-// Whether the on-board display is out of sync with the registry. Text-mode
-// fields are user-authoritative — manual edits on the sticky are reconciled into
-// the registry on selection (sync.ts), so housekeeping must never overwrite
-// them. Only the box display is registry-driven and healed here.
-function needsRender(
-  record: FieldRecord,
-  element: CanvasElement,
-  box: CanvasElement | null,
-): boolean {
-  if (displayMode(record.type) === 'text') return false;
-  const expected = record.fields.map(formatField);
-  if (!box || box.kind !== 'shape') return true;
-  if (!linesEqual(expected, htmlToLines(box.content))) return true;
-  return boxDrifted(element, box, record.fields);
-}
-
-function boxDrifted(element: CanvasElement, box: CanvasElement, fields: Field[]): boolean {
-  const targetY = element.y + element.height / 2 + FIELDS_BOX_GAP + fieldsBoxHeight(fields.length) / 2;
-  return Math.abs(box.x - element.x) > 1 || Math.abs(box.y - targetY) > 1;
-}
-
-function linesEqual(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((line, index) => line === b[index]);
 }

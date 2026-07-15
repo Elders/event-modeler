@@ -83,6 +83,37 @@ Later additions (2026-06-18):
   panel offers Resume/Discard. The *build* truly resumes; the Claude request
   itself can only be cancelled and re-asked (the Messages API isn't resumable).
 
+## Fields: the board display is authoritative (2026-07-15)
+
+Originally only sticky (text-mode) fields were user-editable on the board; a
+screen's/automation's attached box was registry-driven — housekeeping rewrote
+the box from the `em-fields` record whenever they differed, so editing the box
+text did nothing (the panel ignored it) and was reverted within ~4 s. The user
+rejected that asymmetry: **the box must behave like a sticky.**
+
+Current rule, both display modes: **what's drawn on the board is the source of
+truth; the registry follows.** Concretely, for box mode:
+
+- The panel's reconcile poll watches the box text and parses `name : type`
+  lines back into the editor; `syncFieldsFromBoard` and `fieldsHousekeeping`
+  *adopt* a differing box text into the registry record instead of rewriting
+  the box.
+- Housekeeping fits a box's **size and position** to the lines it shows (a
+  manual edit changes the line count but Miro never resizes the shape) but
+  **never rewrites its text** — so an edit in progress can't be clobbered.
+  Content is rewritten only when rebuilding a box that was deleted or evicted;
+  formatting normalizes on the next panel save.
+- **Emptying the box clears the fields and evicts the box.** Two more
+  cautious cuts were rejected in turn: first an emptied box wasn't adopted at
+  all, then it was adopted but the empty shape was left on the board. The
+  user's call: an empty box has nothing to show, so housekeeping removes it
+  and drops its record — the same end state as clearing the fields from the
+  panel. A field-less record whose box is already gone is likewise pruned,
+  never rebuilt.
+
+The record's remaining job is exactly what frames made necessary (see below):
+being the rebuild memory for a box a frame-shrink evicted or deleted.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)
