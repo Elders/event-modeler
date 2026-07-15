@@ -2,17 +2,28 @@
 // validates that every field-bearing element has its fields provided by the
 // elements pointing into it, which supply them together — when their pooled
 // fields don't cover the target's (matched by name and type), every arrow into
-// that target reddens. There are no connector events, so it polls — the
-// reddening is reconciled against a registry of flagged connectors so a closed
-// gap restores each arrow to the exact color it had before.
+// that target reddens and is captioned with the fields nobody supplies. There
+// are no connector events, so it polls — the flagging is reconciled against a
+// registry of flagged connectors so a closed gap restores each arrow to the
+// exact color it had before and takes the caption back off.
+//
+// The caption overwrites whatever the arrow carried, and a hand-written one is
+// not preserved or restored (a deliberate product call — see DECISIONS.md).
+// Only arrows in the flag registry are ever written, so an arrow the check
+// never flagged keeps its caption untouched.
 //
 // Fields are read from what's drawn on the board (sticky text / attached box),
 // not the em-fields registry: the registry is a lazily-populated cache that can
 // lag the canvas, and this check must work for every field-bearing block whether
 // or not the panel has ever synced it.
 
-import { incompleteConnectors, type FieldedElement } from '../domain/completeness';
-import { parseBoxFields } from '../domain/fields';
+import {
+  captionShowsGap,
+  completenessGaps,
+  gapCaption,
+  type FieldedElement,
+} from '../domain/completeness';
+import { htmlToLines, parseBoxFields } from '../domain/fields';
 import { FLAGS_KEY, type ConnectorFlag } from '../domain/records';
 import type { CanvasConnector, CanvasElement } from '../ports/canvas';
 import { services } from '../services';
@@ -29,6 +40,7 @@ const DEFAULT_CONNECTOR_COLOR = '#1a1a1a';
 function isIncompleteColor(color: string | null): boolean {
   return typeof color === 'string' && color.toLowerCase() === INCOMPLETE_COLOR.toLowerCase();
 }
+
 
 let running = false;
 
@@ -54,7 +66,7 @@ async function checkCompleteness(): Promise<void> {
   // element's fields straight off the board — in a fixed handful of batched
   // reads, regardless of model size.
   const { resolved, elements } = await analyze(connectors);
-  const flaggedNow = incompleteConnectors(elements, resolved);
+  const gaps = completenessGaps(elements, resolved);
 
   // Reconcile each connector against whether it should be flagged. The decision
   // is driven by the persisted flag registry, NOT by reading the connector's
@@ -68,21 +80,30 @@ async function checkCompleteness(): Promise<void> {
   let changed = false;
 
   for (const connector of connectors) {
-    const shouldFlag = flaggedNow.has(connector.id);
+    const missing = gaps.get(connector.id);
     const existing = flagsById.get(connector.id);
 
-    if (shouldFlag) {
+    if (missing) {
       if (existing) {
-        kept.push(existing); // already reddened by us — leave it, no write
+        kept.push(existing); // already reddened by us — leave the color, no write
       } else {
         await canvas.setConnectorColor(connector.id, INCOMPLETE_COLOR);
         kept.push({ connector: connector.id, original: connector.color ?? DEFAULT_CONNECTOR_COLOR });
         changed = true;
       }
+      // The caption names the gap, and the gap moves as fields are filled in —
+      // so it's written whenever the line doesn't already show it, not just on
+      // first flag. No registry write: the flag record is unaffected by the text.
+      if (!captionShowsGap(htmlToLines(connector.caption), missing)) {
+        await canvas.setConnectorCaption(connector.id, gapCaption(missing));
+      }
     } else if (existing) {
-      // No longer incomplete — restore to the remembered pre-red color, drop the
-      // flag. Registry-driven, so it works regardless of how the color reads back.
+      // No longer incomplete — restore to the remembered pre-red color and clear
+      // the caption, drop the flag. Registry-driven, so it works regardless of
+      // how the color reads back. Only arrows we flagged are cleared, so the
+      // pass never strips a caption off an arrow it doesn't own.
       await canvas.setConnectorColor(connector.id, existing.original);
+      if (connector.caption !== null) await canvas.setConnectorCaption(connector.id, null);
       changed = true;
     } else if (isIncompleteColor(connector.color)) {
       // Red but untracked (reddened while em-flags couldn't be written) — restore.

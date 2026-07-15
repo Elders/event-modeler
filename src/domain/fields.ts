@@ -229,7 +229,7 @@ function stripHtml(html: string): string {
   return decodeEntities(html.replace(/<[^>]*>/g, '')).trim();
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

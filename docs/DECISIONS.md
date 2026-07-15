@@ -18,7 +18,8 @@ regress any of these without asking the maintainer first.**
 - **Arrows use plain SDK defaults** — zero shape/style overrides. A "match
   arrows to selection" style-capture feature was built and removed (2026-06-11).
   Don't propose arrow-styling features; the user restyles arrows manually. The
-  single exception is the completeness check recoloring under-supplied arrows.
+  single exception is the completeness check, which recolors under-supplied
+  arrows and captions them with the missing fields.
 - **Lean panel**: no app-name header, no close button (redundant with Miro's
   chrome), no controls that duplicate on-board affordances.
 - **Screens/automations are two grouped objects** — title text + image. Frames
@@ -156,6 +157,56 @@ Two consequences, both accepted:
 incoming arrows is the maximally incomplete case and shows nothing, because
 there is no arrow to redden. Reddening the block itself isn't available —
 red is already the error block type in the sticky vocabulary.
+
+### The red arrows name the gap (2026-07-15)
+
+A flagged arrow also carries the missing fields as its caption, so the gap
+reads off the board without opening the Fields editor and diffing the target
+against each source by eye. `completenessGaps` returns connector id → missing
+keys (the flagged set is its key set), and `gapCaption` words it.
+
+Settled with the user, don't churn these:
+
+- **On the arrow, not the block.** Since the gap belongs to the fan-in, every
+  arrow into a target carries the *same* caption — three events feeding a short
+  read model give three identical captions. Accepted; the alternative (captioning
+  the target once) was declined. There is no per-arrow refinement available: the
+  missing keys are by definition supplied by no source, so "what this source
+  fails to supply" and "what the fan-in fails to supply" are the same set.
+- **Full list, no truncation.** A target missing six fields gets all six.
+- **One key per line**, so a red arrow reads like the field list the target is
+  short of, the same way a sticky and the attached box list theirs. `gapCaption`
+  joins with `<br>` rather than the `<p>`-per-line that `renderStickyContent` /
+  `fieldsBoxContent` use — a caption is an inline label on a line, not a text
+  block — but `htmlToLines` splits on both, so the parse side is shared.
+- **Bare keys, no prefix.** `total : number` — the red already says it's a
+  problem, so no "Missing:" lead-in. Keys are the same `name : type` form used
+  on stickies and in the box, in the *target's* field order.
+- **Hand-written captions are not protected.** The caption array is replaced
+  outright; a caption you typed on an arrow that later reddens is destroyed and
+  is *not* restored when the gap closes. The user explicitly declined the
+  preservation machinery (a marker to identify our caption, or the original
+  stashed in `em-flags`) — it cost app-data budget against a tight cap for a
+  case that doesn't arise in practice. What remains is scoping, not protection:
+  only arrows in the `em-flags` registry are written, so the pass never strips a
+  caption off an arrow it didn't flag.
+
+Two implementation constraints, both load-bearing:
+
+- **The caption must not be rewritten on every 4s poll** or the rate limiter
+  trips — a stable board must do zero writes. So the pass checks whether the
+  line already shows the gap and writes only when it doesn't, including when the
+  gap *shrinks* as fields get filled in.
+- **That check compares parsed lines, never markup** (`captionShowsGap` over
+  `htmlToLines`). Miro hands a caption back in its own HTML, so what we wrote is
+  not string-comparable to what we read; only the text is. Comparing the
+  rendered string would mismatch on every tick and rewrite forever. Field names
+  are user text, so `gapCaption` escapes them — and the escaping is what stops a
+  name containing a literal `<br>` from splitting its own line.
+  Nothing is stored: `ConnectorFlag` still holds only the pre-red color.
+
+Chapter arrows are safe from all of this — they're free-standing (endpoints are
+positions, not items), so the rule skips them and their captions are untouched.
 
 ## Platform constraints (learned the hard way)
 

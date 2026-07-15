@@ -266,12 +266,15 @@ export class MiroCanvas implements Canvas {
         start?: { item?: string };
         end?: { item?: string };
         style?: { strokeColor?: string };
+        captions?: { content?: string }[];
       };
+      const caption = c.captions?.[0]?.content;
       return {
         id: c.id,
         start: c.start?.item ?? null,
         end: c.end?.item ?? null,
         color: typeof c.style?.strokeColor === 'string' ? c.style.strokeColor : null,
+        caption: typeof caption === 'string' ? caption : null,
       };
     });
   }
@@ -410,6 +413,20 @@ export class MiroCanvas implements Canvas {
       | undefined;
     if (!connector?.style || !connector.sync) return;
     connector.style.strokeColor = color;
+    await withRateLimit(() => connector.sync!());
+  }
+
+  async setConnectorCaption(id: string, text: string | null): Promise<void> {
+    await this.ensureLive([id]);
+    const connector = this.items.get(id) as unknown as
+      | { captions?: unknown; sync?: () => Promise<unknown> }
+      | undefined;
+    if (!connector?.sync) return;
+    // The whole array is replaced, so any hand-written caption is overwritten —
+    // deliberate (see the Canvas port). An empty array clears the line.
+    connector.captions = text
+      ? [{ content: text, position: 0.5, textAlignVertical: 'top' }]
+      : [];
     await withRateLimit(() => connector.sync!());
   }
 

@@ -23,12 +23,15 @@ export type ElementKind =
 
 // An immutable snapshot of one connector (arrow). Endpoints are the ids of the
 // items the connector attaches to, or null when an end floats free; color is
-// the current stroke color (the canvas default when never overridden).
+// the current stroke color (the canvas default when never overridden). The
+// caption is the text riding on the line — raw host markup, since the canvas
+// may wrap what was written in it — or null when the line carries none.
 export interface CanvasConnector {
   id: string;
   start: string | null;
   end: string | null;
   color: string | null;
+  caption: string | null;
 }
 
 // A group and the ids of its member items. Used to resolve a connector that
@@ -169,6 +172,10 @@ export interface Canvas {
   // Sets a connector's stroke color (used by the completeness check to flag and
   // restore arrows). Connectors otherwise carry no app style overrides.
   setConnectorColor(id: string, color: string): Promise<void>;
+  // Sets the text riding on a connector's line, replacing whatever it carried;
+  // null clears it. Used by the completeness check to name the missing fields
+  // on a flagged arrow, so it deliberately overwrites a hand-written caption.
+  setConnectorCaption(id: string, text: string | null): Promise<void>;
 
   // Metadata.
   setMeta(id: string, meta: ElementMeta): Promise<void>;

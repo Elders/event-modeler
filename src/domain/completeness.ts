@@ -10,7 +10,7 @@
 // on any one source clears them all. No platform here: just the model graph and
 // its fields, so it ports unchanged to any canvas.
 
-import { fieldMatchKey, type Field } from './fields';
+import { escapeHtml, fieldMatchKey, type Field } from './fields';
 
 // One field-bearing element: its id and the fields it declares.
 export interface FieldedElement {
@@ -36,19 +36,24 @@ function fieldKeys(fields: Field[]): Set<string> {
   );
 }
 
-// The ids of the connectors that should be flagged as incomplete. Each target
-// is judged once, over its whole fan-in: the sources pointing into it pool
-// their fields, and the pool must cover every field the target declares,
+// The gap behind every flagged connector: its id mapped to the field keys its
+// target needs and nothing feeding that target supplies. A connector is absent
+// from the map exactly when it isn't flagged, so the keys double as the flagged
+// set.
+//
+// Each target is judged once, over its whole fan-in: the sources pointing into
+// it pool their fields, and the pool must cover every field the target declares,
 // matched by name and type. Optional target fields (shown as "name : type?")
 // are exempt — they're optional, so nothing has to supply them. When the pool
 // falls short, every arrow into that target is returned, including arrows whose
-// own source supplies nothing: the shortfall is the target's, and there's no
-// one arrow to pin it on. Arrows into a target that carries no required fields
-// are never flagged.
-export function incompleteConnectors(
+// own source supplies nothing: the shortfall is the target's, and there's no one
+// arrow to pin it on. Every arrow into a target therefore reports the *same*
+// missing keys — the gap is the fan-in's, not any one arrow's. Arrows into a
+// target that carries no required fields are never flagged.
+export function completenessGaps(
   elements: FieldedElement[],
   connectors: FlowConnector[],
-): Set<string> {
+): Map<string, string[]> {
   const providedById = new Map(elements.map((element) => [element.id, fieldKeys(element.fields)]));
   const requiredById = new Map(
     elements.map((element) => [
@@ -67,7 +72,7 @@ export function incompleteConnectors(
     else incomingByTarget.set(end, [{ id, start }]);
   }
 
-  const flagged = new Set<string>();
+  const gaps = new Map<string, string[]>();
   for (const [target, incoming] of incomingByTarget) {
     const required = requiredById.get(target);
     if (!required || required.size === 0) continue;
@@ -77,8 +82,34 @@ export function incompleteConnectors(
       for (const key of providedById.get(start) ?? []) pooled.add(key);
     }
 
-    const complete = [...required].every((key) => pooled.has(key));
-    if (!complete) for (const { id } of incoming) flagged.add(id);
+    // In the target's own field order, so the caption reads like the block's
+    // field list rather than an arbitrary permutation. The array is shared by
+    // every arrow into this target — they all report the same gap — so callers
+    // must treat it as read-only.
+    const missing = [...required].filter((key) => !pooled.has(key));
+    if (missing.length === 0) continue;
+    for (const { id } of incoming) gaps.set(id, missing);
   }
-  return flagged;
+  return gaps;
+}
+
+// The gap rendered for the board: the missing keys as they're written
+// everywhere else ("name : type"), in full, one per line — so a red arrow reads
+// like the field list the target is short of. Kept here rather than in the
+// feature so a non-Miro canvas words it identically.
+//
+// <br> rather than the <p> per line that renderStickyContent/fieldsBoxContent
+// use: a caption is an inline label on a line, not a text block. Either parses
+// back through htmlToLines, which splits on both.
+export function gapCaption(missing: string[]): string {
+  return missing.map((key) => escapeHtml(key)).join('<br>');
+}
+
+// Whether a caption already shows exactly this gap. Compares the *lines* parsed
+// back out rather than the markup: the host re-wraps what it stores (Miro hands
+// back its own HTML), so the rendered string is not comparable to itself — only
+// the text is. Lets the poll leave a correct caption alone instead of rewriting
+// it every tick.
+export function captionShowsGap(caption: string[], missing: string[]): boolean {
+  return caption.length === missing.length && caption.every((line, i) => line === missing[i]);
 }
