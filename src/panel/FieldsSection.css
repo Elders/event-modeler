@@ -1,7 +1,8 @@
-/* The Fields editor: a column of field rows (grip + name + type, plus a
-   custom-type input when the type is "custom") and an add button. Rows
-   reorder by dragging the grip; the insertion point renders as a line in
-   the gap between rows (pseudo-elements, so no layout shift while dragging). */
+/* The Fields editor: a column of field rows (grip + name + type + optional
+   toggle, plus a custom-type input when the type is "custom") and an add
+   button. Rows reorder by dragging the grip; the insertion point renders as
+   a line in the gap between rows (pseudo-elements, so no layout shift while
+   dragging). */
 
 .fields-list {
   display: flex;
@@ -96,6 +97,33 @@
   flex: 1 1 100%;
   min-width: 0;
   order: 1; /* wrap below the row; keeps × on line 1 with name+type */
+}
+
+/* The optional toggle: a "?" that reads dormant until switched on. */
+.field-optional {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--em-hint);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.field-optional:hover {
+  color: var(--em-ink);
+  background: var(--em-line);
+}
+
+.field-optional.on {
+  color: #fff;
+  border-color: #4262ff;
+  background: #4262ff;
 }
 
 .field-remove {

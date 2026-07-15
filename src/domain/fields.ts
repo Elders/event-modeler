@@ -20,6 +20,9 @@ export interface Field {
   type: FieldType;
   // The free-text type name when `type` is 'custom'.
   customType?: string;
+  // An optional field renders with a "?" after its type and is never required
+  // by the completeness check.
+  optional?: boolean;
 }
 
 // The type options offered in the editor, in display order.
@@ -40,8 +43,10 @@ export const FIELD_TYPES: { value: FieldType; label: string }[] = [
 // app-data budget. `customType` is kept only for the custom type (always a
 // string, never `undefined`, which the Miro app-data store rejects).
 export function storableField(field: Field): Omit<Field, 'id'> {
-  const base = { name: field.name, type: field.type };
-  return field.type === 'custom' ? { ...base, customType: field.customType ?? '' } : base;
+  const base: Omit<Field, 'id'> = { name: field.name, type: field.type };
+  if (field.type === 'custom') base.customType = field.customType ?? '';
+  if (field.optional) base.optional = true;
+  return base;
 }
 
 // A stable id for a field (React keys, edit/remove targeting).
@@ -67,15 +72,24 @@ export function fieldTypeLabel(field: Field): string {
   return field.type;
 }
 
-// One field as a single display line: "name : type".
-export function formatField(field: Field): string {
+// The name+type identity of a field, ignoring optionality: "name : type".
+// The completeness check matches fields on this key, so an optional source
+// field still supplies a required target field of the same name and type.
+export function fieldMatchKey(field: Field): string {
   return `${field.name} : ${fieldTypeLabel(field)}`;
 }
 
+// One field as a single display line: "name : type", with a "?" after the
+// type when the field is optional.
+export function formatField(field: Field): string {
+  return field.optional ? `${fieldMatchKey(field)}?` : fieldMatchKey(field);
+}
+
 // Whether two field lists carry the same fields in the same order — name, type,
-// and custom type name all equal. Ids are ignored: they're per-session edit
-// keys, not identity. Used to decide whether a board-side display and the
-// registry actually disagree before adopting or rewriting anything.
+// custom type name, and optionality all equal. Ids are ignored: they're
+// per-session edit keys, not identity. Used to decide whether a board-side
+// display and the registry actually disagree before adopting or rewriting
+// anything.
 export function sameFields(a: Field[], b: Field[]): boolean {
   return (
     a.length === b.length &&
@@ -83,7 +97,8 @@ export function sameFields(a: Field[], b: Field[]): boolean {
       (field, index) =>
         field.name === b[index].name &&
         field.type === b[index].type &&
-        (field.customType ?? '') === (b[index].customType ?? ''),
+        (field.customType ?? '') === (b[index].customType ?? '') &&
+        (field.optional ?? false) === (b[index].optional ?? false),
     )
   );
 }
@@ -156,7 +171,14 @@ function parseFieldLine(line: string): Field {
   const colon = line.indexOf(':');
   if (colon < 0) return { id: newFieldId(), name: line.trim(), type: 'string' };
   const name = line.slice(0, colon).trim();
-  return { id: newFieldId(), name, ...typeFromLabel(line.slice(colon + 1).trim()) };
+  // A trailing "?" is the optional marker, not part of the type label — so a
+  // custom type whose own name ends in "?" reads back as that type, optional.
+  let label = line.slice(colon + 1).trim();
+  const optional = label.endsWith('?');
+  if (optional) label = label.slice(0, -1).trim();
+  const field: Field = { id: newFieldId(), name, ...typeFromLabel(label) };
+  if (optional) field.optional = true;
+  return field;
 }
 
 // Maps a displayed type label back to a FieldType; an unrecognized label

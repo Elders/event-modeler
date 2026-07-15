@@ -1,9 +1,9 @@
 // The Fields editor: reacts to the board selection and lets the user define
 // fields on the selected block. Resolves the first fieldable element in the
 // selection (a screen's box/title share the group, so we scan past them via
-// each item's meta), shows a grip + name input + type picker per field —
-// rows reorder by dragging the grip (or arrow keys on it) — and persists
-// every change through the fields use-case. Persistence is serialized in
+// each item's meta), shows a grip + name input + type picker + optional
+// toggle per field — rows reorder by dragging the grip (or arrow keys on
+// it) — and persists every change through the fields use-case. Persistence is serialized in
 // features/fields/edit, so we save optimistically without a busy lock.
 
 import './FieldsSection.css';
@@ -246,6 +246,20 @@ export function FieldsSection() {
                 </option>
               ))}
             </select>
+            <button
+              className={field.optional ? 'field-optional on' : 'field-optional'}
+              type="button"
+              aria-pressed={!!field.optional}
+              aria-label="Optional field"
+              title="Optional — shown as a ? after the type"
+              onClick={() =>
+                save(
+                  fields.map((f) => (f.id === field.id ? { ...f, optional: !f.optional } : f)),
+                )
+              }
+            >
+              ?
+            </button>
             {field.type === 'custom' && (
               <input
                 className="field-input field-custom"
