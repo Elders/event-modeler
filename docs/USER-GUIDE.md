@@ -133,6 +133,8 @@ read models, external events, screens, and automations.
 2. **+ Add field** appends a row. Each row is a **name** input and a **type**
    picker — string, number, boolean, date, time, date-time, UUID, or **custom**
    (which reveals a free-text type-name input). **×** removes the row.
+   Pressing **Enter** in a name input inserts a new field directly below that
+   row and moves focus into it, wherever the row sits in the list.
 3. Reorder fields by dragging a row's **⠿ grip** (or focus the grip and use
    the arrow keys); the block on the board redraws in the new order.
 4. Changes save immediately.

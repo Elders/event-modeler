@@ -117,6 +117,29 @@ export function FieldsSection() {
   const edit = (id: string, patch: Partial<Field>) =>
     setFields((current) => current.map((field) => (field.id === id ? { ...field, ...patch } : field)));
 
+  // Enter in a name input inserts a fresh field right below that row and moves
+  // focus into it. The name inputs register themselves by field id so the
+  // post-render effect can find the freshly mounted row's input to focus.
+  const nameInputs = useRef(new Map<string, HTMLInputElement>());
+  const pendingFocus = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingFocus.current) return;
+    const input = nameInputs.current.get(pendingFocus.current);
+    if (!input) return;
+    pendingFocus.current = null;
+    input.focus();
+  });
+
+  const insertBelow = (id: string) => {
+    const index = fields.findIndex((field) => field.id === id);
+    if (index < 0) return;
+    const added = newField();
+    const next = [...fields];
+    next.splice(index + 1, 0, added);
+    pendingFocus.current = added.id;
+    save(next);
+  };
+
   const persist = () => {
     if (target) void saveFields(target.id, target.type, fields).then(nudgeCompleteness).catch(reportError);
   };
@@ -176,7 +199,16 @@ export function FieldsSection() {
               className="field-input field-name"
               placeholder="name"
               value={field.name}
+              ref={(el) => {
+                if (el) nameInputs.current.set(field.id, el);
+                else nameInputs.current.delete(field.id);
+              }}
               onChange={(e) => edit(field.id, { name: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                insertBelow(field.id);
+              }}
               onBlur={persist}
             />
             <select
