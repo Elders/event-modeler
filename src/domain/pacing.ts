@@ -24,6 +24,12 @@
 // only a safety net for changes made with no local activity at all (a REST/bot
 // edit, or a client whose script died); the person who makes a change has an
 // active page of their own, and the results are board state everyone else sees.
+//
+// The same policy paces the panel's Fields watch, which re-reads the board for
+// text typed onto a block directly. Its free signal is the panel regaining focus
+// rather than a selection change — board edits happen while the panel is blurred
+// — but the shape is identical: settle after activity, and an idle fallback for
+// a change nothing local can have noticed.
 
 // Quiet time after the last activity before a pass runs. Long enough that a drag
 // (which fires a selection event per tick) collapses into a single pass at the

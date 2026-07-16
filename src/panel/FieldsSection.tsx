@@ -14,6 +14,7 @@
 
 import './FieldsSection.css';
 import { useEffect, useRef, useState } from 'react';
+import { FALLBACK_CHECK_MS, SETTLE_MS, fallbackDue } from '../domain/pacing';
 import { BLOCKS, type BlockType } from '../domain/vocabulary';
 import { completenessHousekeeping } from '../features/completeness';
 import { failureReason, reportToLog } from '../features/diagnostics';
@@ -109,9 +110,9 @@ export function FieldsSection() {
         loadedId.current = null; // nothing was loaded — let a retry re-read it
         setFields([]); // don't leave another element's fields on screen
         // Drop the targets as well. They would otherwise keep their stale value
-        // (the throw happened before setTargets), leaving the poll below running
-        // against the old element every 2.5s while this failure is on screen —
-        // spending API credits on the board that just told us it has none.
+        // (the throw happened before setTargets), leaving the watch below running
+        // against the old element while this failure is on screen — spending API
+        // credits on the board that just told us it has none.
         setTargets([]);
         setFailure(failureReason(error));
       }
@@ -131,16 +132,33 @@ export function FieldsSection() {
   }, [failure]);
 
   // While the target stays selected, reflect edits made directly on the board:
-  // Miro fires no item-update event, so poll the text that displays the fields —
-  // the sticky's own (text mode) or the attached box's (box mode) — and
-  // reconcile when it changes. Skipped while a panel input is focused, so a
-  // canvas poll can never clobber what the user is typing here.
+  // Miro fires no item-update event, so the text that displays the fields — the
+  // sticky's own (text mode) or the attached box's (box mode) — has to be re-read
+  // and reconciled when it changes. Skipped while a panel input is focused, so a
+  // board read can never clobber what the user is typing here.
+  //
+  // Activity-driven rather than on a fixed clock, for exactly the reason the
+  // board script's passes are (see domain/pacing): the read is a `board.get` at
+  // 500 credits, so the fixed 2.5s interval this replaces cost 12,000 credits a
+  // minute — 720,000/hour, most of the hourly budget — for one block sitting
+  // selected while nobody touched anything.
+  //
+  // Focus is the free signal. Edits on the board happen while this panel is
+  // blurred, and a stale panel only matters once you look back at it — so
+  // regaining focus is both the moment something may have changed and the moment
+  // it starts mattering. The interval is the same safety net it is on the board,
+  // and only that: an edit by a collaborator fires no local event here.
   useEffect(() => {
     if (!target) return;
     const { id, type } = target;
     let stopped = false;
     let lastContent: string | null = null;
-    let boxId: string | null = null; // resolved lazily, then cached across ticks
+    let boxId: string | null = null; // resolved lazily, then cached across reads
+    // The effect above just loaded this target's fields, so the safety net isn't
+    // due for a full interval yet.
+    let lastRead = Date.now();
+    let settleTimer: number | null = null;
+
     const watched = async (): Promise<string | null> => {
       if (displayMode(type) === 'text') {
         const [element] = await services().canvas.get([id]);
@@ -150,33 +168,51 @@ export function FieldsSection() {
       boxId = box?.id ?? null;
       return box?.content ?? null;
     };
-    const tick = async () => {
+
+    const read = async () => {
       if (editingInPanel()) return;
+      // Stamped even if the read below fails: a board that won't answer
+      // shouldn't be asked again on the next check.
+      lastRead = Date.now();
       const content = await watched();
       if (stopped || content === null || content === lastContent) return;
       const reconciled = await syncFieldsFromBoard(id, type);
       if (stopped) return;
       setFields(reconciled);
       // Recorded only after the reconcile lands. Setting it first meant a failed
-      // reconcile still marked the content as seen, and every later tick then
-      // skipped it as unchanged — the poll stayed alive but did nothing.
+      // reconcile still marked the content as seen, and every later read then
+      // skipped it as unchanged — the watch stayed alive but did nothing.
       lastContent = content;
     };
-    // Poll slowly: this only catches fields typed directly on the board (the
-    // panel inputs update immediately on their own), so a relaxed cadence keeps
-    // it from being a constant drain on the shared API budget while selected.
-    //
-    // Supervisor: a failed tick must not become an unhandled rejection or stop
-    // the timer. It reports and the next tick tries the same content again.
-    const timer = window.setInterval(
-      () =>
-        void tick().catch((error) =>
-          reportToLog('Could not re-read the selected element from the board', error),
-        ),
-      2500,
-    );
+
+    // Supervisor: a failed read must not become an unhandled rejection or stop
+    // the timer. It reports and the next one tries the same content again.
+    const supervised = () =>
+      void read().catch((error) =>
+        reportToLog('Could not re-read the selected element from the board', error),
+      );
+
+    // Debounced, so clicking about the panel collapses into a single read.
+    const noteActivity = () => {
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        settleTimer = null;
+        supervised();
+      }, SETTLE_MS);
+    };
+    window.addEventListener('focus', noteActivity);
+
+    // The timer itself is free; only the read it guards costs anything, and it
+    // fires just once per IDLE_FALLBACK_MS.
+    const timer = window.setInterval(() => {
+      if (!fallbackDue(Date.now(), lastRead)) return;
+      supervised();
+    }, FALLBACK_CHECK_MS);
+
     return () => {
       stopped = true;
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      window.removeEventListener('focus', noteActivity);
       clearInterval(timer);
     };
   }, [target?.id, target?.type]);
