@@ -5,14 +5,17 @@
 // all read the tag). Drives the Screen tile's contextual click: with plain
 // images selected the tile converts them; otherwise it places a fresh sketch.
 
-import type { CanvasElement } from '../ports/canvas';
 import { services } from '../services';
+import type { SelectionItem } from '../ports/runtime';
 import { createBlockAtCenter } from './createBlock';
 import { absoluteCenter, addTitleAbove } from './helpers';
 
 // Plain images in the selection: image elements carrying no tool metadata
 // (screens, automation gears, and the on-canvas buttons are all tagged).
-async function adoptableImages(selection: CanvasElement[]): Promise<CanvasElement[]> {
+// Generic over the selection element — identity and kind are all it needs — so
+// the panel can pass the free `SelectionItem`s from selection:update while the
+// adoption below passes the full `CanvasElement`s it goes on to place titles by.
+async function adoptableImages<T extends SelectionItem>(selection: T[]): Promise<T[]> {
   const { canvas } = services();
   const images = selection.filter((el) => el.kind === 'image');
   if (images.length === 0) return [];
@@ -21,9 +24,11 @@ async function adoptableImages(selection: CanvasElement[]): Promise<CanvasElemen
 }
 
 // How many plain images the current selection offers to convert — drives the
-// Screen tile's contextual hint.
-export async function adoptableImageCount(): Promise<number> {
-  return (await adoptableImages(await services().canvas.selection())).length;
+// Screen tile's contextual hint. Counts against the selection the caller was
+// handed: re-reading it cost a 500-credit `board.getSelection()` (Weight Level 3)
+// for a payload selection:update had already pushed for free.
+export async function adoptableImageCount(selection: SelectionItem[]): Promise<number> {
+  return (await adoptableImages(selection)).length;
 }
 
 // The Screen tile's click action. The live selection is re-read here rather

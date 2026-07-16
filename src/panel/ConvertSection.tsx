@@ -24,10 +24,15 @@ export function ConvertSection({ busy, guard }: { busy: boolean; guard: Guard })
   // it would momentarily look like a plain frame; the `busy` dependency re-checks
   // once a panel placement completes, and the delayed re-check covers a drag
   // placement (which doesn't run through the busy guard).
+  //
+  // `selection` comes from the selection:update push and is free, so the only
+  // cost left here is the two registry reads. This used to call
+  // `board.getSelection()` — 500 credits — to fetch what the hook above had
+  // already been handed, twice per selection change.
   useEffect(() => {
     let cancelled = false;
     const inspect = () =>
-      void inspectSelection()
+      void inspectSelection(selection)
         .then((next) => {
           if (!cancelled) setTargets(next);
         })
@@ -43,10 +48,13 @@ export function ConvertSection({ busy, guard }: { busy: boolean; guard: Guard })
     };
   }, [selectionKey, busy]);
 
+  // Converting doesn't change the selection — the frames stay selected, they are
+  // just registered now — so the same items re-inspect correctly, and the
+  // registry reads inside are what notice they've been taken.
   const run = (action: () => Promise<unknown>) =>
     guard(async () => {
       await action();
-      setTargets(await inspectSelection());
+      setTargets(await inspectSelection(selection));
     });
 
   const nothing = targets.frames === 0;

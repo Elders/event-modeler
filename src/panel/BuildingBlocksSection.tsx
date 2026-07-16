@@ -78,10 +78,15 @@ export function BuildingBlocksSection({ busy, guard }: { busy: boolean; guard: G
   const { items: selection } = useSelection();
   const selectionKey = selection.map((item) => item.id).join(',');
   const [adoptable, setAdoptable] = useState(0);
+  //
+  // `selection` arrives on the free selection:update push, so the only cost here
+  // is one 50-credit `getMeta` per selected image. It used to re-read the
+  // selection from the board — 500 credits — for a payload it had already been
+  // given, twice per selection change.
   useEffect(() => {
     let cancelled = false;
     const inspect = () =>
-      void adoptableImageCount()
+      void adoptableImageCount(selection)
         .then((count) => {
           if (!cancelled) setAdoptable(count);
         })
