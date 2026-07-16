@@ -123,36 +123,35 @@ export async function placeZoneCards(
 // Housekeeping for spec copies: prune links whose copy was deleted, and follow
 // the source's color (only) onto its copies. The copy's text is left alone so
 // its fields stay editable. There are no item-update/delete events, so this polls.
+//
+// No supervisor here: this runs only inside specHousekeeping, which already has
+// one. A second catch would just hide the failure from the pass that reports it.
 export async function syncSpecCopies(): Promise<void> {
   const { canvas, store } = services();
-  try {
-    const links = await store.read<SpecLink[]>(LINKS_KEY, []);
-    if (links.length === 0) return;
-    const ids = [...new Set(links.flatMap((link) => [link.source, link.copy]))];
-    const items = await canvas.get(ids);
-    const byId = new Map(items.map((item) => [item.id, item]));
+  const links = await store.read<SpecLink[]>(LINKS_KEY, []);
+  if (links.length === 0) return;
+  const ids = [...new Set(links.flatMap((link) => [link.source, link.copy]))];
+  const items = await canvas.get(ids);
+  const byId = new Map(items.map((item) => [item.id, item]));
 
-    const alive: SpecLink[] = [];
-    const patches: ElementPatch[] = [];
-    let pruned = false;
-    for (const link of links) {
-      const source = byId.get(link.source);
-      const copy = byId.get(link.copy);
-      if (!copy || copy.kind !== 'card') {
-        pruned = true; // the copy was deleted; forget the link
-        continue;
-      }
-      alive.push(link);
-      if (!source || source.kind !== 'card') continue;
-      // Only the color follows the source — the copy's text (and its fields) is
-      // the user's to edit, so it is never overwritten.
-      if (source.color && source.color !== copy.color) {
-        patches.push({ id: copy.id, color: source.color });
-      }
+  const alive: SpecLink[] = [];
+  const patches: ElementPatch[] = [];
+  let pruned = false;
+  for (const link of links) {
+    const source = byId.get(link.source);
+    const copy = byId.get(link.copy);
+    if (!copy || copy.kind !== 'card') {
+      pruned = true; // the copy was deleted; forget the link
+      continue;
     }
-    if (patches.length > 0) await canvas.apply(patches);
-    if (pruned) await store.write(LINKS_KEY, alive);
-  } catch (error) {
-    console.warn('Spec copy sync failed', error);
+    alive.push(link);
+    if (!source || source.kind !== 'card') continue;
+    // Only the color follows the source — the copy's text (and its fields) is
+    // the user's to edit, so it is never overwritten.
+    if (source.color && source.color !== copy.color) {
+      patches.push({ id: copy.id, color: source.color });
+    }
   }
+  if (patches.length > 0) await canvas.apply(patches);
+  if (pruned) await store.write(LINKS_KEY, alive);
 }

@@ -17,6 +17,7 @@
 
 import { blockPosition, placeSlices, type GenerationCheckpoint, type ModelPlan } from '../domain/plan';
 import type { CanvasElement } from '../ports/canvas';
+import { isHostUnavailable } from '../ports/errors';
 import { services } from '../services';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
@@ -192,7 +193,12 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       try {
         await connect(from.id, to.id);
       } catch (error) {
-        console.warn('Could not link generated blocks', error);
+        // A refused endpoint must not abort a long build. A board that has
+        // stopped answering must: the checkpoint already exists so the run can
+        // resume, and pressing on would spend the rest of the plan producing a
+        // model with no links in it.
+        if (isHostUnavailable(error)) throw error;
+        services().diagnostics.report('warn', 'Could not link generated blocks', error);
       }
     }
     checkpoint.progress = { ...checkpoint.progress, links: i + 1 };

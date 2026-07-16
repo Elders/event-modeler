@@ -12,9 +12,12 @@
   border-bottom: 1px solid var(--em-line);
 }
 
+/* Horizontal padding stays small: four tabs have to fit across a ~320px panel
+   without wrapping, and flex:1 already spreads them evenly. */
 .panel-tab {
   flex: 1;
-  padding: 8px 10px;
+  min-width: 0;
+  padding: 8px 4px;
   margin-bottom: -1px; /* overlap the bar's border so the active underline sits on it */
   border: none;
   border-bottom: 2px solid transparent;
@@ -22,6 +25,7 @@
   font: inherit;
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
   color: var(--em-muted);
   cursor: pointer;
 }

@@ -103,8 +103,9 @@ export async function specHousekeeping(): Promise<void> {
     await syncSpecCopies();
   } catch (error) {
     // A retry-exhausted rate-limit (or any failure) must not surface as an
-    // unhandled rejection; the next tick retries from a clean state.
-    console.warn('Spec housekeeping failed', error);
+    // unhandled rejection; the next tick retries from a clean state. This is the
+    // only supervisor over these passes — they report nothing themselves.
+    services().diagnostics.report('warn', 'Spec housekeeping failed', error);
   } finally {
     housekeepingRunning = false;
   }

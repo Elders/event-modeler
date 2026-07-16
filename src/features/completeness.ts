@@ -44,13 +44,16 @@ function isIncompleteColor(color: string | null): boolean {
 
 let running = false;
 
+// The supervisor around the check: one bad tick must not kill the interval or
+// surface as an unhandled rejection, so it is abandoned and retried next tick.
+// It fabricates nothing — it reports, and the Console tab is where that lands.
 export async function completenessHousekeeping(): Promise<void> {
   if (running) return;
   running = true;
   try {
     await checkCompleteness();
   } catch (error) {
-    console.warn('Completeness check failed', error);
+    services().diagnostics.report('warn', 'Completeness check failed', error);
   } finally {
     running = false;
   }
@@ -122,26 +125,40 @@ async function checkCompleteness(): Promise<void> {
 // element's fields from the board. A screen/automation is a title + image + box
 // group, and a connector can attach to the group id or any member — none of
 // which is the fielded image — so endpoints are remapped to the group's lone
-// image member (registry-free, so it works before the panel has synced). The
-// reads are batched to a fixed few calls — the groups, all grouped members at
-// once (which also yields each group's shape contents), then the remaining
-// sticky endpoints in one fetch — plus one metadata read per shape grouped
-// with a *connected* screen, to pick the tagged fields box among them.
+// image member (registry-free, so it works before the panel has synced).
+//
+// Exactly two board.get calls, whatever the model's size: the groups, then every
+// element this pass could possibly need in one fetch. `board.get` costs 500
+// credits — Weight Level 3, the same as creating an image, and 10x an
+// item.getMetadata — so on a pass that runs unattended, the call count is the
+// whole cost (see domain/pacing). The per-shape tag reads that pick the fields
+// box among a screen's shapes are 50 each and cached after the first.
 async function analyze(
   connectors: CanvasConnector[],
 ): Promise<{ resolved: CanvasConnector[]; elements: FieldedElement[] }> {
   const { canvas } = services();
   const groups = await canvas.groups();
-  const memberIds = [...new Set(groups.flatMap((group) => group.members))];
-  const membersById = new Map(
-    (memberIds.length > 0 ? await canvas.get(memberIds) : []).map((el) => [el.id, el] as const),
+
+  // One fetch for both jobs. The grouped members resolve each screen to its
+  // image and its shapes; the connectors' own endpoints are what we then read
+  // fields from. Fetching them separately cost a second 500-credit call for ids
+  // that are largely the same — every endpoint is either a raw id from a
+  // connector (here) or an image that is itself a group member (also here), so
+  // nothing below needs to go back to the board.
+  const wanted = new Set<string>(groups.flatMap((group) => group.members));
+  for (const connector of connectors) {
+    if (connector.start) wanted.add(connector.start);
+    if (connector.end) wanted.add(connector.end);
+  }
+  const byId = new Map(
+    (wanted.size > 0 ? await canvas.get([...wanted]) : []).map((el) => [el.id, el] as const),
   );
 
   const toImage = new Map<string, string>(); // group id / any member → fielded image
   const shapesByImage = new Map<string, CanvasElement[]>(); // fielded image → grouped shape candidates
   for (const group of groups) {
     const members = group.members
-      .map((id) => membersById.get(id))
+      .map((id) => byId.get(id))
       .filter((member): member is CanvasElement => !!member);
     const image = members.find((member) => member.kind === 'image');
     if (!image) continue; // a plain user grouping, not a screen/automation
@@ -164,7 +181,6 @@ async function analyze(
   }
 
   const elements: FieldedElement[] = [];
-  const stickyIds: string[] = [];
   for (const id of endpointIds) {
     // An image endpoint reads from its attached box — but only the shape that
     // carries the fields-box tag counts. A user-drawn shape grouped with the
@@ -175,15 +191,15 @@ async function analyze(
     if (box) {
       const fields = parseBoxFields(box.content);
       if (fields.length > 0) elements.push({ id, fields });
-    } else {
-      stickyIds.push(id);
+      continue;
     }
-  }
-  if (stickyIds.length > 0) {
-    for (const element of await canvas.get(stickyIds)) {
-      const fields = stickyFields(element);
-      if (fields.length > 0) elements.push({ id: element.id, fields });
-    }
+    // Not a screen with a box, so it's a sticky carrying its fields in its own
+    // text — already fetched above, whether it came in as a raw endpoint or as a
+    // group member.
+    const element = byId.get(id);
+    if (!element) continue; // the endpoint no longer exists
+    const fields = stickyFields(element);
+    if (fields.length > 0) elements.push({ id, fields });
   }
 
   return { resolved, elements };

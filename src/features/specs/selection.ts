@@ -76,7 +76,8 @@ async function watchTick() {
     if (watchedKind === 'spec') await reflowSpecFrame(frame, record, records);
     else await redockSliceButton(frame, record, records);
   } catch (error) {
-    console.warn('Container size watch failed', error);
+    // Supervisor for the 350ms watcher: one bad tick must not kill the interval.
+    services().diagnostics.report('warn', 'Container size watch failed', error);
   }
 }
 
@@ -93,7 +94,8 @@ async function finalSizeCheck(frameId: string, kind: WatchedKind) {
     if (kind === 'spec') await reflowSpecFrame(frame, record, records);
     else await redockSliceButton(frame, record, records);
   } catch (error) {
-    console.warn('Container size check failed', error);
+    // Supervisor for the one-shot check that runs after the watcher stops.
+    services().diagnostics.report('warn', 'Container size check failed', error);
   }
 }
 
@@ -149,8 +151,12 @@ export async function handleSpecSelection(items: SelectionItem[]): Promise<void>
       ignoreNextEmptySelection = true;
       try {
         await canvas.deselect();
-      } catch {
+      } catch (error) {
+        // Not swallowing: the flag only exists to absorb the empty selection the
+        // deselect would cause, and a failed deselect causes none. Correcting it
+        // here is the handling — the failure is still reported.
         ignoreNextEmptySelection = false;
+        services().diagnostics.report('warn', 'Could not deselect the spec "+" button', error);
       }
       await notifier.info(`Now select the items to copy into ${zoneTitle(meta.zone)}.`);
       return;
@@ -168,8 +174,10 @@ export async function handleSpecSelection(items: SelectionItem[]): Promise<void>
       ignoreNextEmptySelection = true;
       try {
         await canvas.deselect();
-      } catch {
+      } catch (error) {
+        // As above: the flag is corrected because no empty selection is coming.
         ignoreNextEmptySelection = false;
+        services().diagnostics.report('warn', 'Could not deselect the slice "+" button', error);
       }
       await createSpecification(slice);
       await notifier.info('Specification added inside the slice.');

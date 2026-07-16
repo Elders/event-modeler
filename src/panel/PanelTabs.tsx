@@ -4,12 +4,13 @@
 
 import './PanelTabs.css';
 
-export type PanelTabId = 'build' | 'fields' | 'generate';
+export type PanelTabId = 'build' | 'fields' | 'generate' | 'console';
 
 const TABS: { id: PanelTabId; label: string }[] = [
   { id: 'build', label: 'Build' },
   { id: 'fields', label: 'Fields' },
   { id: 'generate', label: 'Generate' },
+  { id: 'console', label: 'Console' },
 ];
 
 export function PanelTabs({

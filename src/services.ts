@@ -7,6 +7,7 @@
 // matter of writing new adapters and calling `configureServices` with them.
 
 import type { Canvas } from './ports/canvas';
+import type { Diagnostics } from './ports/diagnostics';
 import type { Notifier } from './ports/notifier';
 import type { Planner } from './ports/planner';
 import type { Runtime } from './ports/runtime';
@@ -19,6 +20,9 @@ export interface Services {
   notifier: Notifier;
   viewport: Viewport;
   runtime: Runtime;
+  // Where a supervisor sends the failure it caught. Both pages wire one; each
+  // tags its entries with which page it is, since they are separate iframes.
+  diagnostics: Diagnostics;
   // Optional: only the panel page wires a Planner. The always-on board script
   // has no use for it, so it stays free of the AI adapter (and its bundle).
   planner?: Planner;

@@ -4,6 +4,27 @@
    a line in the gap between rows (pseudo-elements, so no layout shift while
    dragging). */
 
+/* The read-failed state. Styled unlike the "nothing selected" placeholder on
+   purpose — the two used to be the same screen, which is what let a rate-limited
+   board pass for an empty one. */
+.fields-failure {
+  margin: 2px 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--em-ink);
+}
+
+.fields-failure-reason {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--em-error);
+  border-radius: 3px;
+  background: #fdf2f2;
+  font-size: 11px;
+  color: var(--em-muted);
+  overflow-wrap: anywhere;
+}
+
 .fields-list {
   display: flex;
   flex-direction: column;

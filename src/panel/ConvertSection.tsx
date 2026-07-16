@@ -8,13 +8,14 @@
 import './ConvertSection.css';
 import { useEffect, useState } from 'react';
 import { convertFrames, inspectSelection, type ConvertTargets } from '../features/convert';
+import { reportToLog } from '../features/diagnostics';
 import type { Guard } from './useBusyGuard';
 import { useSelection } from './useSelection';
 
 const EMPTY: ConvertTargets = { frames: 0 };
 
 export function ConvertSection({ busy, guard }: { busy: boolean; guard: Guard }) {
-  const selection = useSelection();
+  const { items: selection } = useSelection();
   const selectionKey = selection.map((item) => item.id).join(',');
   const [targets, setTargets] = useState<ConvertTargets>(EMPTY);
 
@@ -26,9 +27,14 @@ export function ConvertSection({ busy, guard }: { busy: boolean; guard: Guard })
   useEffect(() => {
     let cancelled = false;
     const inspect = () =>
-      void inspectSelection().then((next) => {
-        if (!cancelled) setTargets(next);
-      });
+      void inspectSelection()
+        .then((next) => {
+          if (!cancelled) setTargets(next);
+        })
+        // Supervisor: a failed inspection leaves the section showing its "select
+        // plain frames" prompt, so it has to be reported — otherwise a board that
+        // wouldn't answer looks like a selection with nothing to convert.
+        .catch((error) => reportToLog('Could not inspect the selection for conversion', error));
     inspect();
     const settle = window.setTimeout(inspect, 900);
     return () => {

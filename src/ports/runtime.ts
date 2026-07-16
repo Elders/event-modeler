@@ -12,7 +12,10 @@ export type SelectionItem = { id: string; kind: ElementKind };
 export type DropInfo = { x: number; y: number; kind: PaletteKind };
 
 export interface Runtime {
-  onSelectionChange(handler: (items: SelectionItem[]) => void): void;
+  // Selection has many independent listeners (the panel alone has three), so
+  // this is a subscription, not a single slot, and it returns the way to end it.
+  // A caller that can go away — a React component — must call that on unmount.
+  onSelectionChange(handler: (items: SelectionItem[]) => void): () => void;
   onIconClick(handler: () => void): void;
   onDrop(handler: (drop: DropInfo) => void): void;
   openPanel(url: string): Promise<void>;

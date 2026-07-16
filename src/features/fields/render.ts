@@ -16,6 +16,7 @@ import {
 } from '../../domain/fields';
 import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
+import { forgetFieldsBox, rememberFieldsBox } from './boxTags';
 import { displayMode, type FieldRecord } from './model';
 
 const BOX_FILL = '#ffffff';
@@ -100,8 +101,10 @@ async function upsertBox(
     textAlignVertical: 'middle',
   });
   // Tag the box so the recovery scan and the completeness check can tell it
-  // apart from a user-drawn shape grouped with the same element.
+  // apart from a user-drawn shape grouped with the same element. Recording it
+  // locally too saves those lookups a metadata read for a box we just tagged.
   await canvas.setMeta(box.id, { type: 'fields-box' });
+  rememberFieldsBox(box.id);
   // Group the box with the element *and its existing group members* — a screen
   // or automation is already a title+image group, so grouping the box with the
   // image alone would split the image out and orphan the title. Re-grouping the
@@ -118,7 +121,10 @@ async function upsertBox(
 export async function removeFieldsDisplay(record: FieldRecord): Promise<void> {
   const { canvas } = services();
   if (displayMode(record.type) === 'box') {
-    if (record.card) await canvas.remove(record.card);
+    if (record.card) {
+      await canvas.remove(record.card);
+      forgetFieldsBox(record.card); // only after the removal actually landed
+    }
     return;
   }
   const [element] = await canvas.get([record.element]);

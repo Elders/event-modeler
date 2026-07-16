@@ -12,7 +12,7 @@ type MiroDropEvent = { x: number; y: number; target: HTMLElement };
 
 declare global {
   interface Window {
-    __emSelHandler?: (event: MiroSelectionEvent) => void;
+    __emSelSubs?: Set<(items: SelectionItem[]) => void>;
     __emSelRegistered?: boolean;
     __emDropHandler?: (event: MiroDropEvent) => void;
     __emDropRegistered?: boolean;
@@ -41,15 +41,31 @@ function kindOf(type: string): ElementKind {
 }
 
 export class MiroRuntime implements Runtime {
-  onSelectionChange(handler: (items: SelectionItem[]) => void): void {
-    window.__emSelHandler = (event) =>
-      handler(event.items.map((item) => ({ id: item.id, kind: kindOf(item.type) })));
+  // A set of subscribers, not the single handler slot this used to be. The slot
+  // silently broke every listener but the last one to register: on the panel's
+  // Build tab, ConvertSection's effect ran after BuildingBlocksSection's and
+  // overwrote it, freezing the latter's selection for the life of the page.
+  //
+  // The set lives on `window` for the same reason the registration flag does —
+  // HMR re-evaluates this module, and an instance field would start a fresh set
+  // while the SDK listener (registered once per page) kept reading the old one.
+  onSelectionChange(handler: (items: SelectionItem[]) => void): () => void {
+    const subscribers = (window.__emSelSubs ??= new Set());
+    subscribers.add(handler);
     if (!window.__emSelRegistered) {
       window.__emSelRegistered = true;
-      miro.board.ui.on('selection:update', (event: MiroSelectionEvent) =>
-        window.__emSelHandler?.(event),
-      );
+      miro.board.ui.on('selection:update', (event: MiroSelectionEvent) => {
+        const items = event.items.map((item) => ({ id: item.id, kind: kindOf(item.type) }));
+        // Read the set through window each time (HMR freshness), and iterate a
+        // copy: a subscriber may unsubscribe while being notified — a component
+        // unmounting on this very selection — and mutating a Set mid-iteration
+        // skips the next subscriber.
+        for (const subscriber of [...(window.__emSelSubs ?? [])]) subscriber(items);
+      });
     }
+    return () => {
+      subscribers.delete(handler);
+    };
   }
 
   onDrop(handler: (drop: DropInfo) => void): void {

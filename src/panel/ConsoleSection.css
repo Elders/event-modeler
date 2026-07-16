@@ -1,0 +1,133 @@
+/* The Console tab's log list. Dense and monospace-leaning: this is read to find
+   a failure, not browsed. */
+
+.log-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.log-persist {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--em-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.log-persist input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.log-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-entry {
+  padding: 7px 8px;
+  border: 1px solid var(--em-line);
+  /* The level shows as a left rule — colour alone would be the only signal, and
+     the level word is already in the row for anyone who can't see it. */
+  border-left: 3px solid var(--em-note);
+  border-radius: 4px;
+  background: #fbfbfd;
+  overflow-wrap: anywhere;
+}
+
+.log-entry.log-error {
+  border-left-color: var(--em-error);
+}
+
+.log-entry.log-warn {
+  border-left-color: var(--em-event);
+}
+
+.log-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.log-time {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--em-hint);
+}
+
+/* Which page produced the entry — the board script's failures are the ones that
+   were invisible, so the tag earns its place in every row. */
+.log-source {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--em-hint);
+}
+
+.log-source-board {
+  background: var(--em-purple);
+}
+
+.log-source-panel {
+  background: var(--em-muted);
+}
+
+.log-message {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--em-ink);
+}
+
+.log-detail {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--em-muted);
+}
+
+.log-context {
+  margin: 3px 0 0;
+  font-size: 10px;
+  color: var(--em-hint);
+}
+
+.log-toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 10px;
+  color: var(--em-purple);
+  cursor: pointer;
+}
+
+.log-toggle:hover {
+  text-decoration: underline;
+}
+
+.log-stack {
+  margin: 5px 0 0;
+  padding: 6px;
+  max-height: 180px;
+  overflow: auto;
+  border-radius: 3px;
+  background: #f2f2f7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--em-muted);
+  white-space: pre-wrap;
+}

@@ -4,6 +4,7 @@
 
 import { stickyTypeForColor, type BlockType } from '../domain/vocabulary';
 import type { CanvasElement } from '../ports/canvas';
+import { isHostUnavailable } from '../ports/errors';
 import { services } from '../services';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
@@ -215,8 +216,12 @@ export async function stampPattern(id: PatternId): Promise<CanvasElement[]> {
     try {
       await connect(items[from].id, items[to].id);
     } catch (error) {
-      // Not every element type accepts links; keep the blocks regardless.
-      console.warn('Could not link stamped items', error);
+      // Not every element type accepts links, and the blocks are worth keeping
+      // when one refuses. But that reasoning only holds for a refusal: if the
+      // board isn't answering, every remaining link fails too and the stamp
+      // quietly comes out unlinked. So carry on past a "no", not past silence.
+      if (isHostUnavailable(error)) throw error;
+      services().diagnostics.report('warn', 'Could not link stamped items', error);
     }
   }
 

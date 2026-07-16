@@ -83,15 +83,17 @@ export class MiroCanvas implements Canvas {
     return items;
   }
 
-  // Ensures every id is in the cache, fetching the missing ones.
+  // Ensures every id is in the cache, fetching the missing ones. A fetch failure
+  // propagates: swallowing it left the cache empty and every read below silently
+  // behaving as though the element simply had nothing to say.
+  //
+  // An id that no longer exists is not a failure — `board.get` omits it and the
+  // caller sees it missing from the cache, which is what the housekeeping passes
+  // already rely on to detect deletions.
   private async ensureLive(ids: string[]): Promise<void> {
     const missing = ids.filter((id) => !this.items.has(id));
     if (missing.length === 0) return;
-    try {
-      this.cacheAll(await withRateLimit(() => miro.board.get({ id: missing })));
-    } catch (error) {
-      console.warn('Could not fetch board items', error);
-    }
+    this.cacheAll(await withRateLimit(() => miro.board.get({ id: missing })));
   }
 
   private snap(item: LiveItem): CanvasElement {
@@ -327,17 +329,16 @@ export class MiroCanvas implements Canvas {
       | undefined;
     const child = this.items.get(childId);
     if (!frame?.add || !child) return;
-    try {
-      await withRateLimit(() => frame.add!(child));
-      const w = child as unknown as WriteView;
-      w.x = relX;
-      w.y = relY;
-      await withRateLimit(() => w.sync());
-    } catch (error) {
-      // Re-parenting can fail; the child keeps the absolute position it was
-      // created at, so the layout is still right.
-      console.warn('Could not add an element to its container', error);
-    }
+    // A failure propagates. This used to be swallowed on the grounds that "the
+    // child keeps the absolute position it was created at, so the layout is
+    // still right" — true only of a benign refusal, and false of the failure
+    // that actually happens: a rate-limited add leaves the child unparented
+    // while the coords it is then given are meant to be frame-relative.
+    await withRateLimit(() => frame.add!(child));
+    const w = child as unknown as WriteView;
+    w.x = relX;
+    w.y = relY;
+    await withRateLimit(() => w.sync());
   }
 
   async group(ids: string[]): Promise<void> {
@@ -349,61 +350,58 @@ export class MiroCanvas implements Canvas {
     await this.dissolveGroupsOf(ids);
     const items = this.cacheAll(await withRateLimit(() => miro.board.get({ id: ids })));
     if (items.length < 2) return;
-    try {
-      await withRateLimit(() =>
-        miro.board.group({
-          items: items as unknown as Parameters<typeof miro.board.group>[0]['items'],
-        }),
-      );
-    } catch (error) {
-      console.warn('Could not group elements', error);
-    }
+    // Grouping is not cosmetic, so its failure is not ignorable: a screen's
+    // fields box is found through its group members, and the completeness check
+    // resolves connector endpoints to a group's image. A silently ungrouped
+    // screen loses its fields and drops out of the check.
+    await withRateLimit(() =>
+      miro.board.group({
+        items: items as unknown as Parameters<typeof miro.board.group>[0]['items'],
+      }),
+    );
   }
 
   // Ungroups any group that contains one of the given ids, freeing its members
-  // so they can be regrouped. Best-effort — a failure here must not block the
-  // regroup that follows.
+  // so they can be regrouped. A failure propagates: the regroup that follows
+  // would only fail too (Miro rejects grouping items already in a group), and it
+  // is better to say which step actually broke.
   private async dissolveGroupsOf(ids: string[]): Promise<void> {
-    try {
-      const wanted = new Set(ids);
-      const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
-      for (const group of groups) {
-        const g = group as unknown as { itemsIds?: string[]; ungroup?: () => Promise<unknown> };
-        if (g.ungroup && Array.isArray(g.itemsIds) && g.itemsIds.some((m) => wanted.has(m))) {
-          await withRateLimit(() => g.ungroup!());
-        }
+    const wanted = new Set(ids);
+    const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
+    for (const group of groups) {
+      const g = group as unknown as { itemsIds?: string[]; ungroup?: () => Promise<unknown> };
+      if (g.ungroup && Array.isArray(g.itemsIds) && g.itemsIds.some((m) => wanted.has(m))) {
+        await withRateLimit(() => g.ungroup!());
       }
-    } catch (error) {
-      console.warn('Could not dissolve existing groups before regrouping', error);
     }
   }
 
+  // [id] means the board answered and this element is in no group. A failed read
+  // propagates rather than reporting the same thing: "in no group" is how a
+  // screen loses its fields box (findFieldsBox scans the group members), so a
+  // fabricated one silently empties an element's fields.
   async groupMembers(id: string): Promise<string[]> {
     // Query the live group list rather than the item's cached `groupId` — the
     // cached handle can predate the grouping (it was created ungrouped), so its
     // groupId reads stale. The group's own `itemsIds` is always current.
-    try {
-      const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
-      for (const group of groups) {
-        const itemsIds = (group as unknown as { itemsIds?: string[] }).itemsIds;
-        if (Array.isArray(itemsIds) && itemsIds.includes(id)) return itemsIds;
-      }
-    } catch (error) {
-      console.warn('Could not read group members', error);
+    const groups = await withRateLimit(() => miro.board.get({ type: 'group' }));
+    for (const group of groups) {
+      const itemsIds = (group as unknown as { itemsIds?: string[] }).itemsIds;
+      if (Array.isArray(itemsIds) && itemsIds.includes(id)) return itemsIds;
     }
     return [id];
   }
 
+  // An element that is already gone is not a failure — ensureLive leaves it out
+  // of the cache and there is nothing to remove. A failed removal propagates:
+  // the cleanup passes prune their registry record on the assumption the element
+  // went with it, so a swallowed failure orphans the element permanently.
   async remove(id: string): Promise<void> {
     await this.ensureLive([id]);
     const item = this.items.get(id);
     if (!item) return;
-    try {
-      await withRateLimit(() => miro.board.remove(item));
-      this.items.delete(id);
-    } catch (error) {
-      console.warn('Could not remove an element', error);
-    }
+    await withRateLimit(() => miro.board.remove(item));
+    this.items.delete(id);
   }
 
   async setConnectorColor(id: string, color: string): Promise<void> {
@@ -439,40 +437,39 @@ export class MiroCanvas implements Canvas {
     await withRateLimit(() => item.setMetadata!(META_KEY, meta));
   }
 
+  // null means the board answered and this element carries no tag of ours —
+  // including when the element no longer exists, which `ensureLive` reports by
+  // leaving it out of the cache. A failure to *ask* propagates instead: this
+  // returning null on a rate-limited read is what made every typed block look
+  // untyped, and the Fields tab render "nothing selected" for an hour.
   async getMeta(id: string): Promise<ElementMeta | null> {
     await this.ensureLive([id]);
     const item = this.items.get(id) as unknown as
       | { getMetadata?: (key: string) => Promise<unknown> }
       | undefined;
     if (!item?.getMetadata) return null;
-    try {
-      return (
-        ((await withRateLimit(() => item.getMetadata!(META_KEY))) as ElementMeta | undefined) ?? null
-      );
-    } catch {
-      return null;
-    }
+    return (
+      ((await withRateLimit(() => item.getMetadata!(META_KEY))) as ElementMeta | undefined) ?? null
+    );
   }
 
+  // Items created over a frame can get captured by it, their coordinates ending
+  // up parent-relative while we supplied absolute — re-pin them. "Not captured"
+  // is the normal case and returns quietly; a failed read or write propagates,
+  // because an unsettled element sits at visibly the wrong place on the board.
   async settle(id: string, absX: number, absY: number): Promise<void> {
-    // Items created over a frame can get captured by it, their coordinates
-    // ending up parent-relative while we supplied absolute — re-pin them.
-    try {
-      const [fresh] = await withRateLimit(() => miro.board.get({ id: [id] }));
-      if (!fresh) return;
-      this.cache(fresh);
-      const view = fresh as unknown as ReadView;
-      if (!('parentId' in view) || !view.parentId) return;
-      const [parent] = await withRateLimit(() => miro.board.get({ id: [view.parentId!] }));
-      if (!parent || parent.type !== 'frame') return;
-      const p = parent as unknown as ReadView;
-      const w = fresh as unknown as WriteView;
-      w.x = absX - ((p.x ?? 0) - (p.width ?? 0) / 2);
-      w.y = absY - ((p.y ?? 0) - (p.height ?? 0) / 2);
-      await withRateLimit(() => w.sync());
-    } catch (error) {
-      console.warn('Could not settle a created element into its frame', error);
-    }
+    const [fresh] = await withRateLimit(() => miro.board.get({ id: [id] }));
+    if (!fresh) return;
+    this.cache(fresh);
+    const view = fresh as unknown as ReadView;
+    if (!('parentId' in view) || !view.parentId) return;
+    const [parent] = await withRateLimit(() => miro.board.get({ id: [view.parentId!] }));
+    if (!parent || parent.type !== 'frame') return;
+    const p = parent as unknown as ReadView;
+    const w = fresh as unknown as WriteView;
+    w.x = absX - ((p.x ?? 0) - (p.width ?? 0) / 2);
+    w.y = absY - ((p.y ?? 0) - (p.height ?? 0) / 2);
+    await withRateLimit(() => w.sync());
   }
 
   setBulkMode(on: boolean, signal?: AbortSignal): void {
@@ -487,12 +484,7 @@ export class MiroCanvas implements Canvas {
   }
 
   async deepLink(id: string): Promise<string | null> {
-    try {
-      const info = await withRateLimit(() => miro.board.getInfo());
-      return `https://miro.com/app/board/${info.id}/?moveToWidget=${id}`;
-    } catch (error) {
-      console.warn('Could not resolve the board id for an element link', error);
-      return null;
-    }
+    const info = await withRateLimit(() => miro.board.getInfo());
+    return `https://miro.com/app/board/${info.id}/?moveToWidget=${id}`;
   }
 }

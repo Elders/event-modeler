@@ -50,28 +50,29 @@ export async function createSlice(
 // Attaches the on-canvas "add specification" button at a frame's bottom-center
 // — selecting it places a new spec inside, growing the slice to fit — and
 // registers the frame as a slice. Shared by createSlice (a fresh frame) and by
-// adopting a plain frame the user drew. A failure here leaves the frame intact
-// but unregistered, so it is logged rather than thrown.
+// adopting a plain frame the user drew.
+//
+// A failure propagates. It used to be logged on the grounds that "the frame is
+// left intact but unregistered" — but an unregistered frame is not a slice: it
+// grows nothing, docks nothing, and the user is looking at a frame they believe
+// is a slice. The callers run under the panel's busy guard, which turns this
+// into a visible failure instead of a silent one.
 export async function adoptSliceFrame(frame: CanvasElement): Promise<void> {
   const { canvas, store } = services();
-  try {
-    const offset = sliceButtonOffset(frame.width, frame.height);
-    const button = await canvas.createImage({
-      url: PLUS_ICON_URL,
-      x: frame.x,
-      y: frame.y + frame.height / 2 - SLICE_BUTTON_INSET,
-      width: SPEC_ADD_SIZE,
-    });
-    await canvas.setMeta(button.id, { type: 'slice-add-spec', slice: frame.id });
-    await canvas.addToContainer(frame.id, button.id, offset.x, offset.y);
-    const records = await readSliceRecords();
-    await store.write(SLICES_KEY, [
-      ...records,
-      { frame: frame.id, labels: [button.id], width: frame.width, height: frame.height },
-    ]);
-  } catch (error) {
-    console.warn('Could not attach the add-spec button to the slice', error);
-  }
+  const offset = sliceButtonOffset(frame.width, frame.height);
+  const button = await canvas.createImage({
+    url: PLUS_ICON_URL,
+    x: frame.x,
+    y: frame.y + frame.height / 2 - SLICE_BUTTON_INSET,
+    width: SPEC_ADD_SIZE,
+  });
+  await canvas.setMeta(button.id, { type: 'slice-add-spec', slice: frame.id });
+  await canvas.addToContainer(frame.id, button.id, offset.x, offset.y);
+  const records = await readSliceRecords();
+  await store.write(SLICES_KEY, [
+    ...records,
+    { frame: frame.id, labels: [button.id], width: frame.width, height: frame.height },
+  ]);
 }
 
 // Draws a slice around the current selection, padded on all sides, and adopts
@@ -128,35 +129,36 @@ export async function redockSliceButton(
   records: FrameRecord[],
 ): Promise<void> {
   const { canvas, store } = services();
-  try {
-    const offset = sliceButtonOffset(slice.width, slice.height);
-    const buttonId = record.labels[0];
-    const [button] = buttonId ? await canvas.get([buttonId]) : [];
-    if (button && button.kind === 'image') {
-      if (button.parentId === slice.id) {
-        await canvas.apply([{ id: button.id, x: offset.x, y: offset.y }]);
-      } else {
-        // Shrinking the slice evicted the button — pin it at the bottom-center
-        // absolutely, then re-adopt it so it tracks future moves.
-        await canvas.apply([
-          { id: button.id, x: slice.x, y: slice.y + slice.height / 2 - SLICE_BUTTON_INSET },
-        ]);
-        await canvas.addToContainer(slice.id, button.id, offset.x, offset.y);
-      }
+  // A failure propagates, and deliberately skips the size record below. Catching
+  // it here was worse than silent: the new size was recorded anyway, so the
+  // size-change detector concluded the re-dock was done and never tried again —
+  // leaving the button stranded for good. Letting it throw means the size stays
+  // unrecorded, the next tick still sees a difference, and it retries.
+  const offset = sliceButtonOffset(slice.width, slice.height);
+  const buttonId = record.labels[0];
+  const [button] = buttonId ? await canvas.get([buttonId]) : [];
+  if (button && button.kind === 'image') {
+    if (button.parentId === slice.id) {
+      await canvas.apply([{ id: button.id, x: offset.x, y: offset.y }]);
     } else {
-      // The button is gone (children can be dropped on shrink) — recreate it.
-      const fresh = await canvas.createImage({
-        url: PLUS_ICON_URL,
-        x: slice.x,
-        y: slice.y + slice.height / 2 - SLICE_BUTTON_INSET,
-        width: SPEC_ADD_SIZE,
-      });
-      await canvas.setMeta(fresh.id, { type: 'slice-add-spec', slice: slice.id });
-      await canvas.addToContainer(slice.id, fresh.id, offset.x, offset.y);
-      record.labels = [fresh.id];
+      // Shrinking the slice evicted the button — pin it at the bottom-center
+      // absolutely, then re-adopt it so it tracks future moves.
+      await canvas.apply([
+        { id: button.id, x: slice.x, y: slice.y + slice.height / 2 - SLICE_BUTTON_INSET },
+      ]);
+      await canvas.addToContainer(slice.id, button.id, offset.x, offset.y);
     }
-  } catch (error) {
-    console.warn('Could not re-dock the slice button', error);
+  } else {
+    // The button is gone (children can be dropped on shrink) — recreate it.
+    const fresh = await canvas.createImage({
+      url: PLUS_ICON_URL,
+      x: slice.x,
+      y: slice.y + slice.height / 2 - SLICE_BUTTON_INSET,
+      width: SPEC_ADD_SIZE,
+    });
+    await canvas.setMeta(fresh.id, { type: 'slice-add-spec', slice: slice.id });
+    await canvas.addToContainer(slice.id, fresh.id, offset.x, offset.y);
+    record.labels = [fresh.id];
   }
   record.width = slice.width;
   record.height = slice.height;

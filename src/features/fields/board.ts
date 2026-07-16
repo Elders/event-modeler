@@ -9,18 +9,21 @@ import { parseStickyFields, type Field } from '../../domain/fields';
 import { stickyTypeForColor } from '../../domain/vocabulary';
 import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
+import { isFieldsBox } from './boxTags';
 import { isFieldable } from './model';
 
 // The shape among `candidates` that carries the fields-box tag, or null. Only a
 // tagged shape is ever treated as a fields box: a user-drawn shape grouped with
 // the same element must never be mistaken for one — it would get parsed as
 // fields, rewritten, resized, re-docked, and eventually evicted.
+//
+// The tag lookup is cached (see boxTags): this runs once per shape per connected
+// screen on every completeness pass, so it was the term that made the check's
+// cost grow with the model.
 export async function fieldsBoxAmong(candidates: CanvasElement[]): Promise<CanvasElement | null> {
-  const { canvas } = services();
   for (const candidate of candidates) {
     if (candidate.kind !== 'shape') continue;
-    const meta = await canvas.getMeta(candidate.id);
-    if (meta?.type === 'fields-box') return candidate;
+    if (await isFieldsBox(candidate.id)) return candidate;
   }
   return null;
 }

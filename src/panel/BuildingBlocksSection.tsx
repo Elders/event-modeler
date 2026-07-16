@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BLOCKS, type PaletteKind } from '../domain/vocabulary';
 import { adoptableImageCount, placeOrAdoptScreens } from '../features/adoptImages';
 import { createBlockAtCenter } from '../features/createBlock';
+import { reportToLog } from '../features/diagnostics';
 import { insertChapter } from '../features/chapter';
 import { createSliceAroundSelection } from '../features/slices';
 import { insertSwimlane } from '../features/swimlane';
@@ -74,15 +75,20 @@ export function BuildingBlocksSection({ busy, guard }: { busy: boolean; guard: G
   // count drives its hint. Re-inspected when a panel action finishes (just-
   // converted images stop being plain) and once more after a short settle, since
   // a just-dropped screen can be selected before its metadata write lands.
-  const selection = useSelection();
+  const { items: selection } = useSelection();
   const selectionKey = selection.map((item) => item.id).join(',');
   const [adoptable, setAdoptable] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const inspect = () =>
-      void adoptableImageCount().then((count) => {
-        if (!cancelled) setAdoptable(count);
-      });
+      void adoptableImageCount()
+        .then((count) => {
+          if (!cancelled) setAdoptable(count);
+        })
+        // Supervisor: this only drives the Screen tile's hint, so a failed count
+        // leaves the tile in its plain mode rather than breaking the palette —
+        // but it says so instead of looking like "no images are selected".
+        .catch((error) => reportToLog('Could not count adoptable images', error));
     inspect();
     const settle = window.setTimeout(inspect, 900);
     return () => {

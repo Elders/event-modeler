@@ -305,6 +305,165 @@ adaptive limiter in [src/adapters/miro/rateLimit.ts](../src/adapters/miro/rateLi
 in [src/index.ts](../src/index.ts), and idempotent completeness connector-color
 writes (only write when the live color actually differs).
 
+> **Superseded in part (2026-07-16).** The per-minute message above is only one
+> of two budgets, and it is not the one that bit us. See "The polling cadence
+> follows activity" below: the `1000000 credits per hour` budget is a sustained
+> ceiling, and retries + adaptive pacing are the wrong response to it.
+
+## Failures are reported, never fabricated (2026-07-16)
+
+**The bug.** "After a while, selecting an element with fields shows nothing in
+the Fields tab, for every element, and only a board refresh fixes it."
+
+**The cause.** Miro's hourly credit budget running out —
+`The API rate limit was exceeded. Requests can use up to 1000000 credits in
+total per hour.` Note this is a *different* budget from the per-minute one
+recorded above, and a much less forgiving one: the adaptive limiter decays its
+gap back to 0 within ~8 successful calls, which is a sensible response to a
+per-minute window and far too eager against an hourly one.
+
+But the rate limit only *triggered* it. What made it a latch was that every
+layer laundered the failure into a plausible answer:
+
+- `MiroCanvas.getMeta` caught and returned `null` → "this element has no type".
+- `MiroStore.read` caught and returned its fallback → "the registry is empty".
+- `MiroCanvas.ensureLive` caught → the cache stayed empty and every read below
+  silently behaved as though the element had nothing to say.
+- `resolveFieldTarget`'s last fallback, `canvas.get`, was the one call that
+  *didn't* catch — so it threw into an uncaught `void (async () => {…})()` in
+  `FieldsSection`, `setTarget` never ran, and `target` stayed at its initial
+  `null`.
+
+`target === null` renders "Select a command, event…". So the panel stated, with
+confidence, that the user's selection had no fields — while the truth was that it
+had not managed to look. It never recovered because the effect only re-runs when
+`selectionKey` changes, and the poll that would have healed it was gated behind
+`if (!target) return`.
+
+**The decision.** A failure is reported, never turned into a value. Adapters
+propagate; only a supervisor catches; carrying on past a failure requires naming
+and checking the condition (`isHostUnavailable`). The rules are in
+[CLAUDE.md](../CLAUDE.md); this is why they exist.
+
+**Rejected: "report everything, change no control flow."** Considered, because
+it has no regression risk. Declined — it's incoherent. If carrying on is
+correct, the condition wasn't an error; if it was an error, carrying on is the
+bug. The Fields tab would still have rendered the placeholder over a rate limit,
+just with a log line beside it.
+
+**Rejected: "remove every catch."** The `patterns`/`generate` link loops name a
+real condition (frames reject connector endpoints — see the SDK landmines), and
+one refused link should not abort a 50-block build. They keep their catch, but
+must rethrow `HostUnavailableError`: a board that has stopped answering will
+refuse the rest of the plan too, and pressing on would produce a model with no
+links in it.
+
+**The nastiest one found on the way.** `redockSliceButton` caught its failure
+and then recorded the frame's new size anyway. The size-change detector compares
+against that record, so it concluded the re-dock was done and never retried —
+the button stayed stranded permanently. Swallowing was not the whole bug there;
+gating heal state on a step that may have failed was. Hence the corollary in
+CLAUDE.md.
+
+**Visibility.** The board script has no UI and its housekeeping runs with the
+panel closed, so its `console.warn`s only ever reached a devtools console nobody
+had open — which is why this went undiagnosed. Hence the **Console tab** and the
+`Diagnostics` port. Transport is a `BroadcastChannel`, never board app data: it
+costs no API credits, and the failure being reported is usually the credit budget
+running out. Persistence is `localStorage`, off by default (the user's call), and
+written by the board page alone — it is the long-lived page and a single writer
+means no lost-update race.
+
+## Background work is driven by activity, not a clock (2026-07-16)
+
+The root cause behind the Fields tab outage above. Two budgets exist, and the
+section further up this file only knew about one of them:
+
+| Budget | Kind | Behaviour |
+| --- | --- | --- |
+| `100000 credits per minute` | burst ceiling | transient; retrying rides it out |
+| `1000000 credits per hour` | **sustained** ceiling, ~16.7k/min averaged | nothing works until the window rolls |
+
+You can sit far under the burst ceiling and still exhaust the hourly one over an
+hour. That is the "after a while".
+
+**What it actually costs.** From the
+[Web SDK rate limiting docs](https://developers.miro.com/docs/websdk-reference-rate-limiting):
+
+| Method | Credits | Level |
+| --- | --- | --- |
+| `miro.board.get`, `board.getSelection` | **500** | 3 |
+| `createImage`, `createEmbed`, `image.sync`, `item.getConnectors` | 500 | 3 |
+| everything else we call — `item.getMetadata`/`setMetadata`, `getAppData`/`setAppData`, every create, `item.sync` | 50 | 1 |
+
+`board.get` is the expensive one — as costly as creating an image, and 10x a
+metadata read. It is the docs' own exception to "most calls are 50", and it is
+the call our polling is made of.
+
+The completeness pass made **four** `board.get` calls (all connectors, all
+groups, all grouped members, the sticky endpoints) plus a registry read:
+
+```
+2,050 credits/pass (+50 per shape grouped with a connected screen)
+x 900 passes/hour at a fixed 4s
+= 1,845,000 credits/hour   on an EMPTY board, against a 1,000,000 budget
+```
+
+Add the 8s loop (~1,800/tick = 810,000/hour, 81% of the budget by itself) and the
+board burned ~2.6-3.5M credits/hour. It died roughly 17-20 minutes after loading,
+every time. The panel latch above is what made that feel permanent: credits
+sawtooth back, but the Fields tab never retried, so only a refresh cleared it.
+
+**This was never about model size.** An earlier draft of this entry blamed the
+per-shape metadata reads and concluded the board degraded "as the model grows
+past ~20 screens". Wrong: those reads are 50 credits each — the cheap part. The
+four `board.get`s are 2,000 of the 2,050, and the 4s poll was over budget at any
+board size, including an empty one.
+
+**The fixes**, in order of what they bought:
+
+1. **Passes are driven by activity, not a clock** (`domain/pacing`).
+   `selection:update` is a push event and costs nothing, so the board script can
+   tell when a human did something without spending anything to find out. A pass
+   runs ~2s after activity settles — debounced, so a drag collapses into one pass
+   at the end instead of one per 4s for its duration. This is both cheaper and
+   *more* responsive than the fixed poll: it fires when you finish an edit rather
+   than up to 4s later. A heavy editing hour drops from 900 passes to ~150.
+2. **The pass makes one `board.get` fewer.** The grouped members and the
+   connector endpoints were fetched separately for ids that largely overlap —
+   every endpoint is either a raw id from a connector or an image that is itself a
+   group member, so one fetch covers both. 2,050 -> 1,550 per pass.
+3. **The hourly 429 is not retried.** It used to burn 7 more calls over ~61s of a
+   budget that was already gone. It now fails fast as `HostUnavailableError` and
+   sets a cooldown.
+4. **Every loop stands down under the cooldown**, completeness included. It was
+   exempt on the grounds of being "light (a few reads)" — three `board.get`s is
+   not light. `isUnderRateLimit()` was `adaptiveGapMs >= 500`, a reasonable proxy
+   for the per-minute limit and useless against the hourly one: the gap halves on
+   every success and hits zero after ~8 calls, so the loops resumed within seconds
+   and re-exhausted a budget needing minutes to refill. It is a deadline now, not
+   a gauge.
+5. **The per-shape tag read is cached** (`features/fields/boxTags`). Worth doing —
+   50 credits x every shape on every pass — but a third-order term, not the cause.
+   A read *failure* is never cached: a cached "no" would silently empty a screen's
+   fields for the life of the page.
+
+**Accepted trade-offs (user's call, 2026-07-16).** The idle safety net runs every
+**120s** (~47k credits/hour, ~5% of budget) and runs completeness *only*. It
+covers the one case activity can't: a change with no local activity anywhere (a
+REST/bot edit, or a client whose script died). Everything a human does is covered
+by the settle, in ~2s — including another user's edits, since whoever makes a
+change has an active page of their own and the repairs are board state everyone
+else simply sees. The heavy passes are deliberately excluded from the net: an
+idle board has had no edits to repair, and including them would double the idle
+cost for nothing.
+
+**Correction to the section above:** it records the limit as "100000 credits in
+total per minute" and treats that as the thing to harden against. That is the
+burst ceiling only. The hourly budget is the one that actually bites, and the
+mitigations listed there (retries, adaptive pacing) are the *wrong* response to
+it — they spend more of it.
+
 ## Workflow conventions
 
 - **master is the production branch.** Every push to master builds and

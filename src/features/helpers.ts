@@ -39,8 +39,10 @@ export async function absoluteCenter(el: CanvasElement): Promise<{ x: number; y:
 
 // Puts an editable title above an element (screens, automations) and groups the
 // pair so they move as one. Positions come from the intended absolute
-// coordinates; grouping is cosmetic cohesion, so its failure must not fail the
-// element itself (the adapter's group() swallows errors).
+// coordinates. Grouping is load-bearing, not cosmetic — a screen's fields box is
+// found through its group, and the completeness check resolves endpoints through
+// it — so a failure to group fails the call rather than leaving a half-built
+// screen behind.
 export async function addTitleAbove(
   content: string,
   anchor: CanvasElement,
@@ -67,9 +69,11 @@ export async function addTitleAbove(
   return title;
 }
 
-// Surfaces the real reason in a notification (the Notifier truncates).
+// Surfaces the real reason in a notification (the Notifier truncates), and puts
+// it in the log — a toast is gone in seconds, and the Console tab is where it
+// can still be read afterwards and exported.
 export async function reportError(error: unknown): Promise<void> {
-  console.error(error);
+  services().diagnostics.report('error', 'Action failed', error);
   const reason = error instanceof Error ? error.message : String(error);
   await services().notifier.error(`Failed: ${reason}`);
 }

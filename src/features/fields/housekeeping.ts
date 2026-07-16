@@ -7,16 +7,11 @@
 import { FIELDS_BOX_GAP, fieldsBoxHeight, parseBoxFields, sameFields } from '../../domain/fields';
 import { type FieldRecord } from '../../domain/records';
 import { services } from '../../services';
+import { isFieldsBox, rememberFieldsBox } from './boxTags';
 import { displayMode, readFieldRecords, writeFieldRecords } from './model';
 import { removeFieldsDisplay, renderFields } from './render';
 
 let running = false;
-
-// Boxes verified to carry the fields-box tag, checked once per page session.
-// Registry cards are app-written, so a record's box that predates tagging is
-// stamped on sight — this migration is what lets the tag-gated lookups
-// (recovery scan, completeness) recognize boxes created before the tag existed.
-const knownTagged = new Set<string>();
 
 export async function fieldsHousekeeping(): Promise<void> {
   if (running) return;
@@ -25,8 +20,10 @@ export async function fieldsHousekeeping(): Promise<void> {
     await doFieldsHousekeeping();
   } catch (error) {
     // A retry-exhausted rate-limit (or any failure) must not surface as an
-    // unhandled rejection; the next tick retries from a clean state.
-    console.warn('Fields housekeeping failed', error);
+    // unhandled rejection; the next tick retries from a clean state. Abandoning
+    // the tick is the whole response — so it has to be said out loud, or a board
+    // that never heals looks like one that has nothing to heal.
+    services().diagnostics.report('warn', 'Fields housekeeping failed', error);
   } finally {
     running = false;
   }
@@ -77,11 +74,14 @@ async function doFieldsHousekeeping(): Promise<void> {
         continue;
       }
       survivors.push(record);
-      if (!knownTagged.has(box.id)) {
-        if ((await canvas.getMeta(box.id))?.type !== 'fields-box') {
-          await canvas.setMeta(box.id, { type: 'fields-box' });
-        }
-        knownTagged.add(box.id);
+      // Registry boxes are app-written, so one that predates tagging is stamped
+      // on sight — this migration is what lets the tag-gated lookups (recovery
+      // scan, completeness) recognize boxes created before the tag existed. The
+      // lookup is cached, so tell the cache: a "no" it recorded before this
+      // stamp would otherwise outlive the truth for the life of the page.
+      if (!(await isFieldsBox(box.id))) {
+        await canvas.setMeta(box.id, { type: 'fields-box' });
+        rememberFieldsBox(box.id);
       }
       if (!sameFields(parsed, record.fields)) {
         record.fields = parsed;

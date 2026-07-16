@@ -1,5 +1,6 @@
-// Assembles the Miro adapter set into a Services bundle. Each entry point calls
-// this once at startup and hands the result to configureServices(). To run the
+// Assembles the Miro adapter set. Each entry point calls this once at startup,
+// adds the host capabilities that aren't Miro's (the diagnostics log, and the
+// planner on the panel), and hands the result to configureServices(). To run the
 // tool on a different canvas, write an equivalent factory for that platform.
 
 import type { Services } from '../../services';
@@ -9,7 +10,9 @@ import { MiroRuntime } from './runtime';
 import { MiroStore } from './store';
 import { MiroViewport } from './viewport';
 
-export function createMiroServices(): Services {
+// Everything Miro supplies. Diagnostics is the caller's to add: it belongs to
+// the browser, not the canvas, and its source tag differs per page.
+export function createMiroServices(): Omit<Services, 'diagnostics'> {
   return {
     canvas: new MiroCanvas(),
     store: new MiroStore(),
