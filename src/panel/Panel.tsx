@@ -11,14 +11,23 @@ import { GenerateSection } from './GenerateSection';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
 import { PatternsSection } from './PatternsSection';
 import { useBusyGuard } from './useBusyGuard';
+import { useLogSummary } from './useLogSummary';
 
 export function Panel() {
   const { busy, guard } = useBusyGuard();
   const [tab, setTab] = useState<PanelTabId>('build');
+  // Mark the Console tab whenever anything has been recorded. The failures it
+  // collects happen on the board page with the panel shut, so without this the
+  // tab is only ever opened by someone who already suspects something.
+  const logs = useLogSummary();
 
   return (
     <div className="panel">
-      <PanelTabs active={tab} onChange={setTab} />
+      <PanelTabs
+        active={tab}
+        onChange={setTab}
+        indicators={logs.worst ? { console: logs.worst } : undefined}
+      />
       <div className="tab-panel" role="tabpanel">
         {tab === 'build' ? (
           <>

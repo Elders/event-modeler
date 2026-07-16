@@ -38,3 +38,22 @@
   color: var(--em-ink);
   border-bottom-color: #4262ff;
 }
+
+/* Marks a tab with something recorded. Same colours as a log entry's left rule,
+   so the dot and the thing it points at agree. */
+.panel-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.panel-tab-dot-error {
+  background: var(--em-error);
+}
+
+.panel-tab-dot-warn {
+  background: var(--em-event);
+}
