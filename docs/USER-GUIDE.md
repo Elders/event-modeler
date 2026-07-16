@@ -46,9 +46,10 @@ tool and the app understands the result.
 
 1. Open a Miro board where the Event Modeler app is installed.
 2. Click the app's icon in Miro's left toolbar — the panel opens.
-3. The panel has three tabs: **Build** (the manual palette), **Fields** (the
-   data editor for the selected block), and **Generate** (draft a model from
-   text with AI).
+3. The panel has four tabs: **Build** (the manual palette), **Fields** (the
+   data editor for the selected block), **Generate** (draft a model from text
+   with AI), and **Console** (anything the app failed to do — the tab marks
+   itself when there's something to see, so you can ignore it until it does).
 
 The app is an assistant, not a replacement for Miro: everything it places is
 an ordinary Miro item afterward. You move, resize, relabel, restyle, connect,
@@ -130,14 +131,21 @@ model. Every block except errors and notes can carry them: commands, events,
 read models, external events, screens, and automations.
 
 1. Select a block on the board; the Fields tab shows its type and fields.
-2. **+ Add field** appends a row. Each row is a **name** input and a **type**
+2. **+ Add field** appends a row. Each row is a **name** input, a **type**
    picker — string, number, boolean, date, time, date-time, UUID, or **custom**
-   (which reveals a free-text type-name input). **×** removes the row.
-   Pressing **Enter** in a name input inserts a new field directly below that
-   row and moves focus into it, wherever the row sits in the list.
+   (which reveals a free-text type-name input) — and a **?** toggle that marks
+   the field **optional**. **×** removes the row. Pressing **Enter** in a name
+   input inserts a new field directly below that row and moves focus into it,
+   wherever the row sits in the list.
 3. Reorder fields by dragging a row's **⠿ grip** (or focus the grip and use
    the arrow keys); the block on the board redraws in the new order.
 4. Changes save immediately.
+
+**Optional fields.** A field marked optional may or may not be there at
+runtime; a plain field is one the block always carries. Optional shows on the
+board as a **`?` after the type** — `email : string?` — and you can type that
+`?` directly on the block instead of using the toggle. The distinction is not
+just documentation: it changes the completeness check (§5) on both sides.
 
 Where fields appear on the board:
 
@@ -166,17 +174,50 @@ Where fields appear on the board:
 Fields let the app verify that information actually *flows*. Continuously, in
 the background:
 
-> For every arrow, the **source** block must supply every field the **target**
-> block declares — matched by name **and** type.
+> Everything pointing into a block must, **between them**, supply every field
+> that block requires — matched by name **and** type.
 
-An arrow whose source is missing any of its target's fields turns **red**.
-Fix it by adding the missing field to the source (or removing/renaming it on
-the target), and the arrow returns to exactly the color it had before —
-usually within a few seconds.
+The check judges a **block and its whole fan-in at once**, not one arrow at a
+time. All the blocks feeding a target pool their fields, and the target is
+satisfied when that pool covers what it requires. No single source has to carry
+the whole payload: a read model hydrated by three events is complete when the
+three events *together* supply its fields, even though no one event does.
 
-Notes: arrows into a target with no fields are never flagged; arrows with a
-loose (unattached) end are ignored; a field with the right name but the wrong
-type counts as missing. The check runs whether or not the panel is open.
+When the pool falls short, **every** arrow into that block turns **red** — the
+shortfall belongs to the fan-in as a whole, and there's no honest way to pin it
+on one arrow. They all report the same gap, and adding a missing field to any
+one source clears them all at once.
+
+**Optional counts on both sides.** An optional field (the `?` from §4) is
+exempt as a target and useless as a source:
+
+- On the **target** — an optional field need not be supplied by anyone.
+- On a **source** — an optional field supplies nobody. A field that may be
+  absent can't guarantee one that must be present.
+
+So `email : string?` on an upstream block does **not** satisfy a required
+`email : string` downstream — the arrow stays red until some source carries it
+as required, or the target's own field is marked optional. One source carrying
+it as required is enough, however many others carry it only optionally.
+
+**A red arrow tells you what's missing.** Each flagged arrow is captioned with
+the shortfall, one missing field per line, in the target's field order:
+
+- `total : number` — nothing feeding the block carries this field at all.
+- `Field "email : string" is required` — the fan-in *does* carry that exact
+  name and type, but only as optional. Drop the `?` upstream.
+
+Close the gap and the arrow returns to exactly the color it had before, usually
+within a few seconds. Note that the caption **overwrites any text the arrow
+already had, and that text is gone for good** — when the gap closes the app
+removes its own caption and leaves the line blank rather than restoring what
+was there. Arrows the check never flagged are never captioned or cleared, so
+text you write on an arrow that stays black is safe.
+
+Notes: a block that requires no fields is never flagged — nor is one whose
+fields are all optional; arrows with a loose (unattached) end are ignored; a
+field with the right name but the wrong type counts as missing. The check runs
+whether or not the panel is open.
 
 ---
 
@@ -262,9 +303,15 @@ you had placed it by hand.
 
 ## 8. Tips & troubleshooting
 
-- **An arrow turned red** — that's the completeness check (§5): the source
-  block doesn't carry every field its target declares. Compare their fields;
-  match names *and* types.
+- **An arrow turned red** — that's the completeness check (§5): the blocks
+  feeding its target don't supply, between them, every field the target
+  requires. Read the arrow's caption — it names exactly what's missing. Every
+  arrow into that target reddens together, so adding the gap to any one source
+  clears the lot.
+- **A red arrow lists a field I can see upstream** — the caption reads
+  *`Field "…" is required`* when an upstream block carries that field but marks
+  it optional (`?`). An optional field supplies nobody (§5); drop the `?` on
+  the source, or mark the target's field optional too.
 - **Something didn't update immediately** — background upkeep (spec re-layout,
   field-box healing, arrow recoloring) runs on a few-seconds cycle. Give it a
   moment before assuming something's wrong.
