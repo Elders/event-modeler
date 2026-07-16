@@ -20,7 +20,7 @@ import { failureReason, reportToLog } from '../features/diagnostics';
 import { reportError } from '../features/helpers';
 import { findFieldsBox } from '../features/fields/board';
 import { setFields as saveFields } from '../features/fields/edit';
-import { resolveFieldTarget } from '../features/fields/recognize';
+import { resolveFieldTargets, type FieldTarget } from '../features/fields/recognize';
 import { syncFieldsFromBoard } from '../features/fields/sync';
 import {
   FIELD_TYPES,
@@ -59,7 +59,12 @@ export function FieldsSection() {
   // "nothing selected" placeholder for exactly the same reason as our own reads.
   const { items: selection, failure: selectionFailure } = useSelection();
   const selectionKey = selection.map((item) => item.id).join(',');
-  const [target, setTarget] = useState<{ id: string; type: BlockType } | null>(null);
+  // Every field-bearing block in the selection, not just one of them. The editor
+  // acts only when there is exactly one: Miro reports a selection in its own
+  // order, so picking "the first" picked an arbitrary block and then edited it
+  // without saying which.
+  const [targets, setTargets] = useState<FieldTarget[]>([]);
+  const target = targets.length === 1 ? targets[0] : null;
   const [fields, setFields] = useState<Field[]>([]);
   // Why the editor has nothing to show, when it has nothing to show. null means
   // the board answered; a string means it didn't, and the editor says so instead
@@ -73,22 +78,25 @@ export function FieldsSection() {
   // landing after an edit) can't clobber what the user is actively editing.
   const loadedId = useRef<string | null>(null);
 
-  // Re-resolve the target whenever the selected ids change; reload its fields
-  // only when the resolved target is a *different* element.
+  // Re-resolve the targets whenever the selected ids change; reload the fields
+  // only when the single resolved target is a *different* element.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const found = await resolveFieldTarget(selection);
+        const found = await resolveFieldTargets(selection);
         if (cancelled) return;
-        setTarget(found);
+        setTargets(found);
         setFailure(null);
-        const foundId = found?.id ?? null;
+        // Only ever load for exactly one. Several selected blocks is a question
+        // for the user, not a block for us to pick.
+        const single = found.length === 1 ? found[0] : null;
+        const foundId = single?.id ?? null;
         if (foundId === loadedId.current) return;
         // Reconcile the on-board display back into the registry: parse fields the
         // user typed on a sticky (text mode), or recover a box-mode block's fields
         // from its attached box when its registry record was lost.
-        const loaded = found ? await syncFieldsFromBoard(found.id, found.type) : [];
+        const loaded = single ? await syncFieldsFromBoard(single.id, single.type) : [];
         if (cancelled) return;
         setFields(loaded);
         // Marked loaded only now. Setting it before the await meant a cancelled
@@ -100,11 +108,11 @@ export function FieldsSection() {
         reportToLog("Could not read the selected element's fields", error);
         loadedId.current = null; // nothing was loaded — let a retry re-read it
         setFields([]); // don't leave another element's fields on screen
-        // Drop the target as well. It would otherwise keep its stale value (the
-        // throw happened before setTarget), leaving the poll below running
+        // Drop the targets as well. They would otherwise keep their stale value
+        // (the throw happened before setTargets), leaving the poll below running
         // against the old element every 2.5s while this failure is on screen —
         // spending API credits on the board that just told us it has none.
-        setTarget(null);
+        setTargets([]);
         setFailure(failureReason(error));
       }
     })();
@@ -268,6 +276,21 @@ export function FieldsSection() {
           Retry
         </button>
         <p className="footnote">Retrying on its own every 15 seconds. See the Console tab.</p>
+      </section>
+    );
+  }
+
+  // Several blocks selected. The editor could show one of them — it used to —
+  // but the one it showed was Miro's pick, and editing it changed a block the
+  // user never chose. Asking is the only honest option until editing several at
+  // once is a thing this can actually do.
+  if (targets.length > 1) {
+    return (
+      <section className="section">
+        <h2 className="section-title">Fields</h2>
+        <p className="section-sub">
+          {targets.length} blocks selected — select a single one to edit its fields.
+        </p>
       </section>
     );
   }
