@@ -9,7 +9,7 @@ Miro SDK landmines, product decisions) applies to any agent working here.
 Document map:
 
 - [CLAUDE.md](CLAUDE.md) — canonical: commands, architecture, SDK landmines, product decisions.
-- [SPECIFICATION.md](SPECIFICATION.md) — the feature specification, kept in sync with the code.
+- [docs/SPECIFICATION.md](docs/SPECIFICATION.md) — the feature specification, kept in sync with the code.
 - [docs/DECISIONS.md](docs/DECISIONS.md) — product decisions and platform constraints with full context; do not regress these.
 - [docs/USER-GUIDE.md](docs/USER-GUIDE.md) — end-user guide: the panel's UI controls and workflows, plus an event-modeling overview.
 - [README.md](README.md) — setup and Miro app registration.
