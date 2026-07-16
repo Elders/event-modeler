@@ -24,6 +24,47 @@ function timeOf(entry: LogEntry): string {
   return new Date(entry.time).toLocaleTimeString(undefined, { hour12: false });
 }
 
+// Puts text on the clipboard by whichever route this host permits.
+//
+// navigator.clipboard is the right API and is tried first, but Miro does not
+// grant this panel the `clipboard-write` permissions policy, so here it always
+// rejects with NotAllowedError (crbug.com/414348233) — and the iframe's
+// attributes are Miro's to set, not ours. execCommand is deprecated but is not
+// gated by that policy and still copies from a user gesture. The click is that
+// gesture, and awaiting the rejection above doesn't cost us it: a microtask
+// continuation stays inside the same task's transient activation.
+//
+// Falling through to the second attempt is not swallowing the first: nothing is
+// claimed to have worked, and if the fallback fails too the original blockage is
+// what gets reported, being the more useful of the two.
+async function copyText(text: string): Promise<void> {
+  let blocked: unknown;
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch (error) {
+    blocked = error;
+  }
+
+  const area = document.createElement('textarea');
+  area.value = text;
+  area.setAttribute('readonly', '');
+  // Off-screen but still selectable — display:none or visibility:hidden would
+  // make it unselectable and the copy would quietly do nothing.
+  area.style.position = 'fixed';
+  area.style.top = '-1000px';
+  area.style.opacity = '0';
+  document.body.appendChild(area);
+  try {
+    area.select();
+    if (!document.execCommand('copy')) {
+      throw blocked ?? new Error('The browser refused the copy.');
+    }
+  } finally {
+    area.remove();
+  }
+}
+
 // Hands the log to the user as a file. The panel owns the only DOM in the app,
 // so the save happens here rather than behind the use-case.
 function save(filename: string, content: string): void {
@@ -63,13 +104,11 @@ function Entry({ entry }: { entry: LogEntry }) {
 
   const copy = async () => {
     try {
-      // navigator.clipboard needs a secure context AND the clipboard-write
-      // permission policy on this iframe. It's absent outright in some contexts,
-      // so the property access can throw as readily as the write can reject —
-      // either way it says so rather than looking like a button that does nothing.
-      await navigator.clipboard.writeText(entryAsJson(entry));
+      await copyText(entryAsJson(entry));
       setCopied(true);
     } catch (error) {
+      // Both routes refused. Say so rather than look like a button that does
+      // nothing — which is how we learned the modern API is blocked here at all.
       reportToLog('Could not copy the log entry to the clipboard', error);
     }
   };
