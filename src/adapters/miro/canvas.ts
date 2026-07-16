@@ -51,6 +51,26 @@ type WriteView = {
   sync(): Promise<unknown>;
 };
 
+// The item types that can carry app metadata, by the SDK's own type strings.
+// From the Web SDK reference: supported on card, connector, embed, image,
+// preview, shape, sticky note and text — and NOT on frames, groups, or item
+// types the SDK doesn't model. An allowlist rather than a denylist, so an
+// unfamiliar type is never asked: we could not have tagged it in the first place.
+const META_TYPES = new Set([
+  'sticky_note',
+  'card',
+  'shape',
+  'image',
+  'text',
+  'connector',
+  'embed',
+  'preview',
+]);
+
+function canHoldMeta(type: string): boolean {
+  return META_TYPES.has(type);
+}
+
 function kindOf(type: string): ElementKind {
   switch (type) {
     case 'sticky_note':
@@ -428,6 +448,10 @@ export class MiroCanvas implements Canvas {
     await withRateLimit(() => connector.sync!());
   }
 
+  // Deliberately NOT guarded by canHoldMeta, unlike getMeta below. "This element
+  // carries no tag" is a true answer for something that can't hold one; "I
+  // tagged it" is not. Tagging a frame is a bug in the caller (that's why the
+  // em-* registries exist), and it should say so rather than quietly no-op.
   async setMeta(id: string, meta: ElementMeta): Promise<void> {
     await this.ensureLive([id]);
     const item = this.items.get(id) as unknown as
@@ -444,12 +468,20 @@ export class MiroCanvas implements Canvas {
   // untyped, and the Fields tab render "nothing selected" for an hour.
   async getMeta(id: string): Promise<ElementMeta | null> {
     await this.ensureLive([id]);
-    const item = this.items.get(id) as unknown as
-      | { getMetadata?: (key: string) => Promise<unknown> }
-      | undefined;
-    if (!item?.getMetadata) return null;
+    const item = this.items.get(id);
+    if (!item) return null;
+    // An element that cannot hold metadata carries no tag of ours because it
+    // *can't* — a fact about the board, not a failure, so it is answered without
+    // asking. Miro rejects the call outright on those types ("The specified
+    // command is unsupported: Frame.getMetadata()") rather than returning
+    // nothing, and the published types declare the method anyway, so neither a
+    // `typeof` check nor the type-checker catches it. This is the named
+    // condition that lets us carry on; without it, selecting a slice threw.
+    if (!canHoldMeta(item.type)) return null;
+    const view = item as unknown as { getMetadata?: (key: string) => Promise<unknown> };
+    if (!view.getMetadata) return null;
     return (
-      ((await withRateLimit(() => item.getMetadata!(META_KEY))) as ElementMeta | undefined) ?? null
+      ((await withRateLimit(() => view.getMetadata!(META_KEY))) as ElementMeta | undefined) ?? null
     );
   }
 
