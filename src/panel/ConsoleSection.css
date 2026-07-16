@@ -52,9 +52,10 @@
   border-left-color: var(--em-event);
 }
 
+/* Metadata and the copy action only — the message sits below on its own line. */
 .log-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
 }
 
@@ -87,9 +88,31 @@
 }
 
 .log-message {
+  margin: 3px 0 0;
   font-size: 11px;
   font-weight: 500;
   color: var(--em-ink);
+}
+
+/* Copies this one entry's JSON. Fixed width so swapping "Copy" for "Copied"
+   doesn't shuffle the row; pushed right, away from the metadata. */
+.log-copy {
+  flex: none;
+  margin-left: auto;
+  width: 44px;
+  padding: 1px 0;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 3px;
+  background: #fff;
+  font: inherit;
+  font-size: 9px;
+  color: var(--em-muted);
+  cursor: pointer;
+}
+
+.log-copy:hover {
+  color: var(--em-ink);
+  border-color: var(--em-muted);
 }
 
 .log-detail {

@@ -7,6 +7,7 @@
 
 import {
   describeError,
+  formatLogEntry,
   formatLogExport,
   logExportFilename,
   type LogEntry,
@@ -51,6 +52,11 @@ export function exportLog(): { filename: string; content: string } {
     filename: logExportFilename(now),
     content: formatLogExport(services().diagnostics.entries(), now),
   };
+}
+
+// One entry as JSON, for copying a single failure out of the list.
+export function entryAsJson(entry: LogEntry): string {
+  return formatLogEntry(entry);
 }
 
 // Reports a failure the panel itself hit. Features and supervisors call the port

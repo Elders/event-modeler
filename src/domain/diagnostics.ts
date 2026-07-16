@@ -67,6 +67,21 @@ export function mergeEntries(existing: LogEntry[], incoming: LogEntry[]): LogEnt
   return [...byId.values()].sort((a, b) => a.time - b.time).slice(-LOG_CAP);
 }
 
+// One entry, as it appears in an export. The id is left out: it exists to
+// deduplicate entries arriving over the transport, and means nothing to whoever
+// reads the log.
+function exportable(entry: LogEntry): Record<string, unknown> {
+  return {
+    time: new Date(entry.time).toISOString(),
+    level: entry.level,
+    source: entry.source,
+    message: entry.message,
+    ...(entry.detail ? { detail: entry.detail } : {}),
+    ...(entry.context ? { context: entry.context } : {}),
+    ...(entry.stack ? { stack: entry.stack } : {}),
+  };
+}
+
 // The export handed to a human or pasted back to a developer. JSON, so the
 // structure survives: timestamps stay machine-readable and stacks stay intact.
 export function formatLogExport(entries: LogEntry[], exportedAt: number): string {
@@ -74,19 +89,18 @@ export function formatLogExport(entries: LogEntry[], exportedAt: number): string
     {
       exportedAt: new Date(exportedAt).toISOString(),
       count: entries.length,
-      entries: entries.map((entry) => ({
-        time: new Date(entry.time).toISOString(),
-        level: entry.level,
-        source: entry.source,
-        message: entry.message,
-        ...(entry.detail ? { detail: entry.detail } : {}),
-        ...(entry.context ? { context: entry.context } : {}),
-        ...(entry.stack ? { stack: entry.stack } : {}),
-      })),
+      entries: entries.map(exportable),
     },
     null,
     2,
   );
+}
+
+// A single entry, for copying one failure out of the list. No envelope: the
+// `exportedAt`/`count` wrapper describes a whole log, and wrapping one entry in
+// it would only be noise to paste somewhere.
+export function formatLogEntry(entry: LogEntry): string {
+  return JSON.stringify(exportable(entry), null, 2);
 }
 
 // The filename for an export, timestamped so successive exports don't collide.

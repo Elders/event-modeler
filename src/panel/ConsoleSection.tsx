@@ -10,6 +10,7 @@ import './ConsoleSection.css';
 import { useEffect, useState } from 'react';
 import {
   clearLog,
+  entryAsJson,
   exportLog,
   logEntries,
   logPersisted,
@@ -43,6 +44,7 @@ function save(filename: string, content: string): void {
 
 function Entry({ entry }: { entry: LogEntry }) {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const detail = [entry.detail, entry.stack].filter(Boolean).join('\n\n');
   const context = entry.context
     ? Object.entries(entry.context)
@@ -51,13 +53,46 @@ function Entry({ entry }: { entry: LogEntry }) {
         .join(' · ')
     : '';
 
+  // Let the confirmation fade on its own, and cancel it if the entry goes away
+  // (a Clear while it's showing) rather than setting state on a dead component.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copy = async () => {
+    try {
+      // navigator.clipboard needs a secure context AND the clipboard-write
+      // permission policy on this iframe. It's absent outright in some contexts,
+      // so the property access can throw as readily as the write can reject —
+      // either way it says so rather than looking like a button that does nothing.
+      await navigator.clipboard.writeText(entryAsJson(entry));
+      setCopied(true);
+    } catch (error) {
+      reportToLog('Could not copy the log entry to the clipboard', error);
+    }
+  };
+
   return (
     <li className={`log-entry log-${entry.level}`}>
+      {/* Metadata and the action share the top line; the message gets its own,
+          full width. It's a sentence — squeezed beside a timestamp, a badge and
+          a button it had ~127px and wrapped every time. */}
       <div className="log-head">
         <span className="log-time">{timeOf(entry)}</span>
         <span className={`log-source log-source-${entry.source}`}>{entry.source}</span>
-        <span className="log-message">{entry.message}</span>
+        <button
+          className="log-copy"
+          type="button"
+          onClick={() => void copy()}
+          aria-label={copied ? 'Entry copied' : 'Copy this entry as JSON'}
+          title="Copy as JSON"
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </button>
       </div>
+      <p className="log-message">{entry.message}</p>
       {entry.detail && <p className="log-detail">{entry.detail}</p>}
       {context && <p className="log-context">{context}</p>}
       {detail && (
