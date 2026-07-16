@@ -17,11 +17,18 @@ import { parseBoxFields, parseStickyFields, sameFields, type Field } from '../..
 import type { FieldRecord } from '../../domain/records';
 import type { BlockType } from '../../domain/vocabulary';
 import { services } from '../../services';
+import { noteBoardFields } from './base';
 import { findFieldsBox } from './board';
 import { readFieldRecords, recordFor, writeFieldRecords, displayMode } from './model';
 
+// Reading the board is also what establishes the base every later write is
+// checked against (see base.ts): these fields are, by definition, what the board
+// holds right now.
 export async function syncFieldsFromBoard(elementId: string, type: BlockType): Promise<Field[]> {
-  return displayMode(type) === 'text' ? syncStickyText(elementId) : syncBoxFields(elementId, type);
+  const fields =
+    displayMode(type) === 'text' ? await syncStickyText(elementId) : await syncBoxFields(elementId, type);
+  noteBoardFields(elementId, fields);
+  return fields;
 }
 
 async function syncStickyText(elementId: string): Promise<Field[]> {

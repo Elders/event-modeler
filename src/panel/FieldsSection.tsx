@@ -233,11 +233,36 @@ export function FieldsSection() {
     [],
   );
 
+  // The element the editor is showing right now, for write results that land
+  // after the selection has moved on.
+  const shownId = useRef<string | null>(null);
+  useEffect(() => {
+    shownId.current = target?.id ?? null;
+  }, [target?.id]);
+
+  // Write through to the board, and take the board's answer for it. The write is
+  // abandoned rather than applied when the block's fields changed underneath this
+  // editor — someone typed a line onto the block itself since it was loaded — in
+  // which case what comes back is what the board holds, and that replaces what's
+  // on screen. The edit is lost, which is the point: the alternative is deleting
+  // the line they typed on the board, and this editor's copy is the stale one.
+  //
+  // Applied only while that element is still the one on screen: a write resolving
+  // after the user has selected something else must not drop the old block's
+  // fields into the new block's editor.
+  const writeThrough = (t: FieldTarget, next: Field[]) =>
+    saveFields(t.id, t.type, next)
+      .then((outcome) => {
+        if (outcome.applied) return nudgeCompleteness();
+        if (shownId.current === t.id) setFields(outcome.board);
+      })
+      .catch(reportError);
+
   // Immediate persist (add / remove / type change). The list is the source of
   // truth while editing, so update locally first and write through.
   const save = (next: Field[]) => {
     setFields(next);
-    if (target) void saveFields(target.id, target.type, next).then(nudgeCompleteness).catch(reportError);
+    if (target) void writeThrough(target, next);
   };
 
   // Local-only update while typing a text input; committed on blur.
@@ -268,7 +293,7 @@ export function FieldsSection() {
   };
 
   const persist = () => {
-    if (target) void saveFields(target.id, target.type, fields).then(nudgeCompleteness).catch(reportError);
+    if (target) void writeThrough(target, fields);
   };
 
   // Reorder: move one field to a new position and write through like any edit.

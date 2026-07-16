@@ -86,6 +86,19 @@ export function formatField(field: Field): string {
   return field.optional ? `${fieldMatchKey(field)}?` : fieldMatchKey(field);
 }
 
+// The fields as the board will read them back once these are rendered onto it —
+// a round trip through the display format.
+//
+// Rendering is lossy in places: a custom type with no name shows as "custom" and
+// parses back as the custom type *named* "custom", and an empty name loses its
+// leading space. So a caller that records what it wrote (rather than what it
+// later read) must record this, not the raw input — otherwise the note disagrees
+// with the very display it produced. Comparing fields is only meaningful between
+// two values that have both been through here, or both come off the board.
+export function asDisplayed(fields: Field[]): Field[] {
+  return linesToFields(fields.map(formatField), []);
+}
+
 // Whether two field lists carry the same fields in the same order — name, type,
 // custom type name, and optionality all equal. Ids are ignored: they're
 // per-session edit keys, not identity. Used to decide whether a board-side
