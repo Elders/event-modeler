@@ -69,3 +69,17 @@
   outline: none;
   border-color: #4262ff;
 }
+
+/* A settings read or write that failed. Deliberately not styled as a hint: an
+   empty key field alone reads as "never configured", which is the thing this
+   exists to contradict. */
+.generate-settings-error {
+  margin: 8px 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--em-error);
+  border-radius: 3px;
+  background: #fdf2f2;
+  font-size: 11px;
+  color: var(--em-muted);
+  overflow-wrap: anywhere;
+}

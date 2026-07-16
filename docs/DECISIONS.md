@@ -365,6 +365,33 @@ the button stayed stranded permanently. Swallowing was not the whole bug there;
 gating heal state on a step that may have failed was. Hence the corollary in
 CLAUDE.md.
 
+**The same lie, one layer out: the planner settings.** `readSettings` caught its
+`localStorage` failures and returned `{ apiKey: '' }` — telling a user with a
+perfectly good stored key that they had never configured one. `writeSettings`
+caught and returned normally, i.e. "saved": the user typed their key, saw
+nothing, and found out only when generation failed later. Both now propagate.
+
+The reason this took its own pass rather than riding along with the adapters: all
+three reads happened *during render* (`getSettings` once, `isConfigured` twice),
+so propagating naively trades a silent failure for a crashed Generate tab. The
+fix is to read **once** into a `SettingsLoad` result — captured in a lazy state
+initialiser, reported from an effect — and render the reason. Two consequences
+worth keeping:
+
+- **A failure must stay recoverable.** Unreadable stored data (corrupt JSON) is
+  a failure, but the user *can* fix it by re-entering their key — so the settings
+  form stays usable and the banner says so. An error screen with no way forward
+  would have been a different kind of wrong.
+- **`isConfigured()` is gone from the Planner port.** It read the store a second
+  time to answer what `getSettings()` already knew, and a second read is a second
+  place to decide what a failure means — which is how these lies get in. Callers
+  derive it (`isPlannerConfigured(settings)`).
+
+A failed save deliberately does *not* flip the panel's `configured` flag: the
+planner re-reads the store when it runs, so the previously stored key is still
+the live one. Claiming the new key took effect would be the same fabrication one
+level up.
+
 **Visibility.** The board script has no UI and its housekeeping runs with the
 panel closed, so its `console.warn`s only ever reached a devtools console nobody
 had open — which is why this went undiagnosed. Hence the **Console tab** and the
@@ -372,7 +399,23 @@ had open — which is why this went undiagnosed. Hence the **Console tab** and t
 costs no API credits, and the failure being reported is usually the credit budget
 running out. Persistence is `localStorage`, off by default (the user's call), and
 written by the board page alone — it is the long-lived page and a single writer
-means no lost-update race.
+means no lost-update race. **Both pages read it**, though: the panel seeding only
+from a `replay` broadcast meant a persisted log was invisible whenever the panel
+won the startup race, while sitting in storage intact.
+
+**A "transient" bug is a race with no name yet (2026-07-16).** "Keep after
+refresh" lost the log on a real board, then worked on the retry, and looked
+transient. It wasn't: enabling persistence scheduled the write 500ms later, so a
+refresh inside that window lost it — while the flag said `true`, leaving the
+board looking for a log that had never been written. A debounced write is a write
+that hasn't happened; it is now written immediately on the toggle, and any
+pending write is flushed on `pagehide`.
+
+Worth recording *why the tests missed it*: they used one shared `localStorage`
+for both pages and awaited every debounce, so they only ever exercised the happy
+path. The five original groups still pass against the broken code. A test that
+models the environment charitably tests nothing — the shim now has a `pagehide`
+that fires, and the checks refresh without waiting, like a person would.
 
 ## Background work is driven by activity, not a clock (2026-07-16)
 

@@ -8,14 +8,16 @@
 import './GenerateSection.css';
 import { useEffect, useRef, useState } from 'react';
 import type { GenerationCheckpoint } from '../domain/plan';
+import { failureReason, reportToLog } from '../features/diagnostics';
 import { generateModel, resumeGeneration } from '../features/generate';
 import { clearCheckpoint, loadCheckpoint } from '../features/generateCheckpoint';
 import {
   getPlannerSettings,
-  plannerConfigured,
+  isPlannerConfigured,
   plannerModels,
   savePlannerSettings,
 } from '../features/plannerSettings';
+import type { PlannerSettings } from '../ports/planner';
 import type { Guard } from './useBusyGuard';
 
 function resumeLabel(checkpoint: GenerationCheckpoint): string {
@@ -25,14 +27,42 @@ function resumeLabel(checkpoint: GenerationCheckpoint): string {
   return `Generation paused — ${done} of ${total} slice${total === 1 ? '' : 's'} done.`;
 }
 
+// The stored settings, or the reason they couldn't be read. Reading them can
+// fail (storage blocked, or the stored value unreadable), and a failure must not
+// render as "you have no API key" — the user would conclude their key vanished.
+type SettingsLoad = { ok: true; settings: PlannerSettings } | { ok: false; error: unknown };
+
+function loadSettings(): SettingsLoad {
+  try {
+    return { ok: true, settings: getPlannerSettings() };
+  } catch (error) {
+    return { ok: false, error };
+  }
+}
+
 export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }) {
   const models = plannerModels();
   const [text, setText] = useState('');
-  const initial = getPlannerSettings();
-  const [apiKey, setApiKey] = useState(initial.apiKey);
-  const [model, setModel] = useState(initial.model);
-  const [configured, setConfigured] = useState(plannerConfigured());
-  const [settingsOpen, setSettingsOpen] = useState(!plannerConfigured());
+
+  // Read the store exactly once, capturing any failure instead of letting it
+  // escape a render and take the tab down. A lazy initialiser, so there's no
+  // flash of "no key" before an effect fills it in; StrictMode may run it twice,
+  // which is two harmless reads — the report below happens once.
+  const [load] = useState<SettingsLoad>(loadSettings);
+  useEffect(() => {
+    if (!load.ok) reportToLog('Could not read the saved planner settings', load.error);
+  }, [load]);
+
+  const stored = load.ok ? load.settings : null;
+  const [apiKey, setApiKey] = useState(stored?.apiKey ?? '');
+  const [model, setModel] = useState(stored?.model ?? models[0]?.id ?? '');
+  const [configured, setConfigured] = useState(!!stored && isPlannerConfigured(stored));
+  // Open the settings when there's nothing usable in there — including when the
+  // read failed, since re-entering the key is how the user gets out of that.
+  const [settingsOpen, setSettingsOpen] = useState(!configured);
+  // Set when a save didn't stick. Silence here was the worse of the two lies:
+  // the key looked accepted and simply wasn't there next time.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // A paused build persisted on the board (null = none), and whether *our* run
   // is currently active. The abort controller is held across renders so Stop can
@@ -45,8 +75,17 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
   useEffect(refreshCheckpoint, []);
 
   const persist = (nextKey: string, nextModel: string) => {
-    savePlannerSettings({ apiKey: nextKey, model: nextModel });
-    setConfigured(nextKey.trim().length > 0);
+    try {
+      savePlannerSettings({ apiKey: nextKey, model: nextModel });
+      setConfigured(nextKey.trim().length > 0);
+      setSaveError(null);
+    } catch (error) {
+      // `configured` is deliberately left alone: the planner re-reads the store
+      // when it runs, so whatever was there before is still what it will use.
+      // Claiming this key took effect would be the same lie one layer up.
+      reportToLog('Could not save the planner settings', error);
+      setSaveError(failureReason(error));
+    }
   };
 
   const canGenerate = configured && text.trim().length > 0;
@@ -124,12 +163,27 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
         </button>
       )}
 
-      {!configured && (
+      {!configured && load.ok && (
         <p className="footnote">Add your Anthropic API key in settings below to enable this.</p>
       )}
 
       <details className="generate-settings" open={settingsOpen}>
         <summary onClick={() => setSettingsOpen((v) => !v)}>Settings</summary>
+
+        {/* The read failed. Say that — an empty key field on its own reads as
+            "you never set one", and the user would go looking for a key they
+            already have. The form stays usable: re-entering it is the way out,
+            and if writing is broken too the save error below will say so. */}
+        {!load.ok && (
+          <p className="generate-settings-error">
+            Couldn't read your saved settings — {failureReason(load.error)}. Your key may still
+            be there; re-enter it to carry on.
+          </p>
+        )}
+
+        {saveError && (
+          <p className="generate-settings-error">Not saved — {saveError}. Nothing was stored.</p>
+        )}
 
         <label className="generate-label" htmlFor="planner-key">
           Anthropic API key

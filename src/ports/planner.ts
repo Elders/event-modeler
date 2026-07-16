@@ -29,10 +29,14 @@ export interface Planner {
   // The models the user may choose between.
   models(): PlannerModel[];
 
-  // Current configuration, and a way to persist a change to it.
+  // Current configuration, and a way to persist a change to it. Both THROW if
+  // the store can't be reached: an empty key means the user hasn't set one, and
+  // a silent `setSettings` means it saved — neither may be said on a guess.
+  //
+  // There is deliberately no `isConfigured()`. It existed, and read the store a
+  // second time to answer what `getSettings()` already knows — a second read is
+  // a second place to decide what a failure means, which is how these lies get
+  // in. Callers derive it: `getSettings().apiKey.trim() !== ''`.
   getSettings(): PlannerSettings;
   setSettings(settings: PlannerSettings): void;
-
-  // Whether the planner has everything it needs to run (i.e. an API key).
-  isConfigured(): boolean;
 }

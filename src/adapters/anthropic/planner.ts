@@ -25,10 +25,6 @@ export class AnthropicPlanner implements Planner {
     writeSettings(settings);
   }
 
-  isConfigured(): boolean {
-    return readSettings().apiKey.trim().length > 0;
-  }
-
   async plan(text: string, signal?: AbortSignal): Promise<ModelPlan> {
     const trimmed = text.trim();
     if (!trimmed) throw new Error('Paste some text to model first.');

@@ -58,11 +58,20 @@ export class BrowserDiagnostics implements Diagnostics {
     this.source = source;
     this.persister = persister;
     this.persist = readPersistFlag();
-    if (this.persister && this.persist) this.log = readStoredLog();
+    // BOTH pages read the stored log; only the board writes it. Reading is safe
+    // from anywhere, and it means the panel doesn't depend on a replay arriving:
+    // that request is sent once and answered only if the other page happens to
+    // be listening already, so a persisted log was invisible whenever the panel
+    // won the startup race — while sitting in storage, intact.
+    if (this.persist) this.log = readStoredLog();
     this.openChannel();
-    // A page that starts mid-session (the panel) asks the other for what it
-    // already has, so the tab opens showing the history rather than a blank list.
+    // Still ask: with persistence off there is nothing stored to read, and the
+    // board's history is only obtainable from the board.
     if (!this.persister) this.post({ kind: 'replay-request' });
+    // A debounced write is a write that hasn't happened. The page can go away in
+    // between — a board refresh moments after ticking the box was enough to lose
+    // the log the box exists to keep.
+    window.addEventListener('pagehide', () => this.flush());
   }
 
   report(
@@ -175,19 +184,35 @@ export class BrowserDiagnostics implements Diagnostics {
     // the log not to outlive the session, and a stale log left behind would
     // reappear after the next refresh.
     if (!this.persist) {
+      this.cancelPendingWrite();
       guard(() => localStorage.removeItem(LOG_KEY));
       return;
     }
-    this.savePersisted();
+    // Written now, not in 500ms: the user just asked for the log to survive a
+    // reload, and the very next thing they do may be that reload. One toggle is
+    // not the write storm the debounce exists for.
+    this.flush();
   }
 
+  // Batches the writes a burst of entries would otherwise cause — during a
+  // rate-limit storm the log changes every few seconds, and each write
+  // re-serializes all of it.
   private savePersisted(): void {
     if (!this.persister || !this.persist) return;
     if (this.persistTimer !== null) clearTimeout(this.persistTimer);
-    this.persistTimer = window.setTimeout(() => {
-      this.persistTimer = null;
-      guard(() => localStorage.setItem(LOG_KEY, JSON.stringify(this.log)));
-    }, PERSIST_DEBOUNCE_MS);
+    this.persistTimer = window.setTimeout(() => this.flush(), PERSIST_DEBOUNCE_MS);
+  }
+
+  // Writes whatever is pending, right now.
+  private flush(): void {
+    this.cancelPendingWrite();
+    if (!this.persister || !this.persist) return;
+    guard(() => localStorage.setItem(LOG_KEY, JSON.stringify(this.log)));
+  }
+
+  private cancelPendingWrite(): void {
+    if (this.persistTimer !== null) clearTimeout(this.persistTimer);
+    this.persistTimer = null;
   }
 
   private post(message: Message): void {

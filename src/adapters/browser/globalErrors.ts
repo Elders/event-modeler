@@ -19,6 +19,17 @@ declare global {
   }
 }
 
+// Where the error came from, when the browser knows. It often doesn't — an error
+// thrown from the devtools console carries no filename — and an absent field is
+// left out rather than reported as null: the log is read by people, and a key
+// with nothing behind it is noise in the export.
+function originOf(event: ErrorEvent): Record<string, string | number> | undefined {
+  const origin: Record<string, string | number> = {};
+  if (event.filename) origin.source = event.filename;
+  if (event.lineno) origin.line = event.lineno;
+  return Object.keys(origin).length > 0 ? origin : undefined;
+}
+
 export function installGlobalErrorCapture(diagnostics: Diagnostics): void {
   // The indirection keeps the sink fresh across hot reloads without stacking
   // listeners (same idiom as MiroRuntime's handler slots).
@@ -27,10 +38,12 @@ export function installGlobalErrorCapture(diagnostics: Diagnostics): void {
   window.__emErrorsRegistered = true;
 
   window.addEventListener('error', (event) => {
-    window.__emErrorsSink?.report('error', 'Uncaught error', event.error ?? event.message, {
-      source: event.filename || null,
-      line: event.lineno || null,
-    });
+    window.__emErrorsSink?.report(
+      'error',
+      'Uncaught error',
+      event.error ?? event.message,
+      originOf(event),
+    );
   });
 
   window.addEventListener('unhandledrejection', (event) => {
