@@ -7,7 +7,7 @@
 // coerces a loosely-shaped object into a safe ModelPlan, dropping anything that
 // doesn't reference real blocks so the build step can assume well-formed data.
 
-import type { FieldType } from './fields';
+import { cleanFieldName, type FieldType } from './fields';
 import type { FieldRecord } from './records';
 import { STICKY_LABEL, type BlockType, type StickyBlockType } from './vocabulary';
 
@@ -158,11 +158,16 @@ function isStickyType(
 // Keep only well-formed fields: a non-empty name and one of the concrete types.
 // `optional` is kept only when strictly true (never a stored `false`/undefined),
 // matching the lean shape storableField persists.
+//
+// The name is cleaned before it is judged: a colon is not a name character (see
+// cleanFieldName), and this is the trust boundary — a model that answers with
+// "order:id" must not put a name through that the board would then eat. A name
+// that was *only* colons cleans to empty and is dropped by the check below.
 function normalizeFields(raw: unknown): PlannedField[] {
   const fields: PlannedField[] = [];
   for (const rawField of asArray(raw)) {
     const f = (rawField ?? {}) as Record<string, unknown>;
-    const name = asString(f.name);
+    const name = cleanFieldName(asString(f.name));
     const type = asString(f.type) as FieldType;
     if (!name || !PLAN_FIELD_TYPES.includes(type)) continue;
     fields.push(f.optional === true ? { name, type, optional: true } : { name, type });

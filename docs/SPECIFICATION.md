@@ -154,6 +154,13 @@ A field may also be marked **optional**, shown as a `?` after its type
 completeness check reads it on both sides (§7): an optional field need not be
 supplied by anyone, and supplies nobody.
 
+A colon is **not a valid character in a field name**: it is the name/type
+separator, so the first colon on a line ends the name. It is rejected wherever it
+can be — the panel's name input and the generator's plan normalizer both strip it
+— and on the board it simply reads as the separator (`order:id : uuid` parses as
+the field `order` of custom type `id : uuid`). Type labels are unconstrained,
+since everything past the first colon is already the label.
+
 Fields are displayed two ways, by element kind:
 
 - **In-text** (cards) — the fields render as lines inside the card's own text,

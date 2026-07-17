@@ -61,6 +61,23 @@ export function newField(): Field {
   return { id: newFieldId(), name: '', type: 'string' };
 }
 
+// The separator between a field's name and its type on every display line:
+// "name : type". A name therefore cannot contain one — the parsers read
+// everything after the first colon as the type label, so a field named "a:b"
+// renders as "a:b : string" and reads back as the field "a", of a custom type
+// called "b : string". The name is silently gone.
+//
+// So a colon is not a valid character in a field name, and is rejected at every
+// door a name can come in by: the panel's input and the generator's trust
+// boundary. It cannot arrive from the board — parseFieldLine splits the name off
+// at that colon, so what it yields never contains one.
+//
+// Type labels are deliberately unaffected: everything past the first colon is
+// already the label, so a custom type may contain colons and round-trips fine.
+export function cleanFieldName(name: string): string {
+  return name.replace(/:/g, '');
+}
+
 // The type as shown on the board: the custom name when custom, 'UUID' upcased,
 // the plain type word otherwise.
 export function fieldTypeLabel(field: Field): string {

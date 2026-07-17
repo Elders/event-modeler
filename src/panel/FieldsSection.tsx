@@ -26,6 +26,7 @@ import { resolveFieldTargets, type FieldTarget } from '../features/fields/recogn
 import { syncFieldsFromBoard } from '../features/fields/sync';
 import {
   FIELD_TYPES,
+  cleanFieldName,
   displayMode,
   newField,
   type Field,
@@ -407,7 +408,10 @@ export function FieldsSection() {
                 if (el) nameInputs.current.set(field.id, el);
                 else nameInputs.current.delete(field.id);
               }}
-              onChange={(e) => edit(field.id, { name: e.target.value })}
+              // A colon separates the name from the type on the board, so it is
+              // not a name character — dropped as typed or pasted, rather than
+              // accepted here and silently eaten by the parser on the way back.
+              onChange={(e) => edit(field.id, { name: cleanFieldName(e.target.value) })}
               onKeyDown={(e) => {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();

@@ -48,7 +48,11 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
                     type: 'object',
                     additionalProperties: false,
                     properties: {
-                      name: { type: 'string' },
+                      name: {
+                        type: 'string',
+                        description:
+                          'The field name, e.g. "orderId". Must not contain a colon — the board renders a field as "name : type", so a colon is the separator. Use camelCase rather than "order:id".',
+                      },
                       type: {
                         type: 'string',
                         enum: ['string', 'number', 'boolean', 'date', 'time', 'datetime', 'uuid'],

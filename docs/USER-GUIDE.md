@@ -147,6 +147,14 @@ board as a **`?` after the type** — `email : string?` — and you can type tha
 `?` directly on the block instead of using the toggle. The distinction is not
 just documentation: it changes the completeness check (§5) on both sides.
 
+A field **name cannot contain a colon** — the colon is what separates the name
+from the type, so the first one on a line always ends the name. The panel's name
+box simply won't take one (and the generator won't produce one), but a colon you
+type onto a block yourself is read as the separator: `order:id : uuid` becomes a
+field named `order` of a type called `id : uuid`. Name fields `orderId`, not
+`order:id`. Type names are unaffected — everything after the first colon is the
+type, so a custom type may contain them.
+
 Where fields appear on the board:
 
 - **Stickies** — fields render as lines in the sticky's own text, one
