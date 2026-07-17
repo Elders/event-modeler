@@ -148,10 +148,11 @@ Two consequences, both accepted:
 
 - The red no longer pinpoints which path is deficient; it says "look at this
   block and everything feeding it".
-- The rule is strictly looser. An arrow whose source supplies none of the
-  target's fields is now silent as long as its siblings cover everything.
-  Flagging a connector that contributes nothing would be a separate rule; it
-  was not asked for.
+- The rule is strictly looser *for target-level satisfaction*: an arrow whose
+  source supplies none of the target's fields no longer fails the target on
+  its own, as long as its siblings cover everything. A zero-contribution arrow
+  is still flagged, just by a separate rule added later — see *A
+  zero-contribution link still reddens* below (2026-07-17).
 
 **Known blind spot, deliberately left:** a block with required fields and *no*
 incoming arrows is the maximally incomplete case and shows nothing, because
@@ -347,6 +348,45 @@ The generator does not emit aliases. `normalizeFields` builds the plan's fields
 from `name`/`type`/`optional` only, so a mapping is a manual refinement — the
 planner's job is to name the same datum consistently in the first place.
 
+### A zero-contribution link still reddens (2026-07-17)
+
+The known blind spot recorded above — "flagging a connector that contributes
+nothing would be a separate rule; it was not asked for" — was asked for. The
+motivating case: a read model hydrated by two events, where only one of them
+actually carries any of the read model's required fields. The pool is
+satisfied (that one event covers everything), so the target-level rule leaves
+both arrows black — including the one from the event that supplies nothing at
+all, which is exactly the arrow the user wanted to see flagged.
+
+Reviving the original all-or-nothing per-arrow rule (each source must alone
+supply every field the target declares) was considered and rejected again —
+it's the rule this file already reverted once, and it would re-flag the
+idiomatic case (several events each carrying a distinct slice) right along
+with the useless link. Instead the two rules run in sequence: pooling still
+decides whether the *target* is satisfied; only once it is does each arrow get
+a second, individual check.
+
+- **The bar is "contributes anything," not "contributes everything."** An
+  arrow is flagged only if its source supplies *zero* of the target's required
+  fields. Supplying even one is enough to clear it — so a multi-event
+  hydration, where each source legitimately carries only part of the whole,
+  is untouched. This only catches a link that carries none of it.
+- **Optional-only counts as zero contribution**, at the user's explicit call.
+  A source whose only overlap with the target is an optional field doesn't
+  clear the bar — consistent with optional fields satisfying nothing in the
+  pooling rule either (see *Optional supplies nothing* above).
+- **Judged after pooling, not instead of it.** If the pool itself falls short,
+  every arrow into the target is already flagged by the existing rule with the
+  real missing-field list — the zero-contribution check only ever fires for a
+  target that's otherwise fine, so it never doubles up with or overrides the
+  target-level gap.
+- **Its own caption, not the missing-field wording.** `Supplies none of the
+  required fields` — reusing the bare-key or "Field X is required" wording
+  would misstate the target as short a field it isn't; the target has
+  everything it needs, the arrow just isn't part of how. `FieldGap` gained a
+  `kind` discriminant (`'missing'` | `'noContribution'`) so `gapLines` can
+  tell the two apart.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)
@@ -399,6 +439,40 @@ writes (only write when the live color actually differs).
 > of two budgets, and it is not the one that bit us. See "The polling cadence
 > follows activity" below: the `1000000 credits per hour` budget is a sustained
 > ceiling, and retries + adaptive pacing are the wrong response to it.
+
+### Metadata and app data are invisible across separate app registrations (2026-07-17)
+
+**The bug.** "The dev version of the app doesn't recognize the fields of a
+screen. Refreshing the browser doesn't help. Removing and reinstalling the
+prod app doesn't affect it — prod still works fine."
+
+**The cause.** Dev (`localhost:3000`) and prod (the deployed GitHub Pages
+build) were two separate Miro app registrations — two different Client IDs —
+both installed on the same test board. Miro's own docs are explicit, on both
+the item and board reference pages: "An app can access only the metadata that
+it sets. It cannot access metadata set by other apps." That covers both
+`item.setMetadata`/`getMetadata` (the `em` block-type tag, and the
+`fields-box` tag `fieldsBoxAmong` looks for) and `board.getAppData`/
+`setAppData` (every `em-*` registry). A screen's fields box, tagged by
+whichever app created it, is invisible to a *different* app's `getMetadata`
+call on the exact same item — it comes back `null`, which `MiroCanvas.getMeta`
+correctly reports as "no tag" per *Failures: never fabricate an answer* in
+CLAUDE.md, because from that app's perspective it genuinely has none.
+Reinstalling the *same* app (uninstall + reinstall) doesn't change its Client
+ID, so it keeps reading what it always could — which is why prod kept working
+through the troubleshooting and dev never did.
+
+**Not a code bug.** No adapter or feature is misbehaving; this is Miro's
+platform boundary working as documented, not a gap the codebase can close.
+
+**Consequence for testing.** A screen (or any tagged element) created under
+one app registration will never be recognized by another, on the same board,
+no matter how many times either side is reinstalled or the browser refreshed.
+To test dev against real data, either create the test elements from within
+the dev app itself, or — per the README's own registration workflow — use a
+single app registration and repoint its App URL between the local and
+deployed address, rather than keeping two permanent registrations that will
+silently diverge on every tagged element and registry.
 
 ## Failures are reported, never fabricated (2026-07-16)
 

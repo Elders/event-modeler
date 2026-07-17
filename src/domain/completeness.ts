@@ -1,6 +1,8 @@
 // Information-completeness check: a pure data-flow rule over the model. An
 // element that carries fields draws them from the elements pointing into it,
-// and the check is judged per *target*: everything pointing into a target pools
+// and the check runs in two passes over each target's fan-in.
+//
+// First, the *target* is judged as a whole: everything pointing into it pools
 // its fields, and the target is satisfied when that pool covers every field the
 // target declares, matched by name and type (a differing type counts as
 // missing). Only a source's *required* fields supply — a field that may be
@@ -12,8 +14,18 @@
 // the whole, and no single one has to carry all of it. When the pool falls
 // short, every arrow into that target is flagged: the gap belongs to the
 // target's fan-in, not to any one arrow, and closing it on any one source clears
-// them all. No platform here: just the model graph and its fields, so it ports
-// unchanged to any canvas.
+// them all.
+//
+// Second, once the target *is* covered by its fan-in, each arrow is judged on
+// its own: a source that supplies none of what the target needs — not even
+// optionally — is flagged as a no-contribution link, even though the target it
+// feeds is fine. This catches a link that's wired up but never actually
+// carries any of the target's fields, without reviving the all-or-nothing
+// per-arrow rule that was tried and reverted (see DECISIONS.md): a source only
+// has to supply *one* field the target needs to clear this bar, so the
+// idiomatic multi-event hydration pattern above stays untouched — this only
+// catches an arrow that carries none of it. No platform here: just the model
+// graph and its fields, so it ports unchanged to any canvas.
 
 import { escapeHtml, fieldAliasKey, fieldMatchKey, formatField, type Field } from './fields';
 
@@ -23,20 +35,28 @@ export interface FieldedElement {
   fields: Field[];
 }
 
-// One missing field behind a flagged arrow: the field the target requires that
-// nothing feeding it guarantees, and whether the fan-in carries it but only as
-// an *optional* field. Both are gaps — the distinction only words the caption,
-// since a field visibly on an upstream block can't be reported as absent.
+// One gap behind a flagged arrow, either:
 //
-// `key` is the field as the *target* displays it, so an aliased field reports
-// "b > a : string": the arrow names the upstream field that's actually missing,
-// rather than the local name nothing was ever going to supply. For a field with
-// no alias that's identical to its match key, which is every field until someone
-// declares one.
-export interface FieldGap {
-  key: string;
-  optionalUpstream: boolean;
-}
+// - `'missing'`: a field the *target* requires that nothing feeding it
+//   guarantees, plus whether the fan-in carries it but only as an *optional*
+//   field. Both are gaps — the distinction only words the caption, since a
+//   field visibly on an upstream block can't be reported as absent. `key` is
+//   the field as the target displays it, so an aliased field reports
+//   "b > a : string": the arrow names the upstream field that's actually
+//   missing, rather than the local name nothing was ever going to supply. For
+//   a field with no alias that's identical to its match key, which is every
+//   field until someone declares one.
+// - `'noContribution'`: the target *is* covered by its fan-in, but this
+//   arrow's own source supplies none of what the target needs — the link
+//   itself is the thing flagged, not the target.
+export type FieldGap =
+  | { kind: 'missing'; key: string; optionalUpstream: boolean }
+  | { kind: 'noContribution' };
+
+// Shared by every no-contribution arrow — the gap carries no per-field data,
+// so one array does for all of them, same as the missing-field list is shared
+// across a whole flagged fan-in.
+const NO_CONTRIBUTION: FieldGap[] = [{ kind: 'noContribution' }];
 
 // One directed arrow between two elements (start → end). Either endpoint may be
 // unattached (null) — those arrows carry no information and are ignored.
@@ -63,9 +83,11 @@ function fieldKeys(fields: Field[]): Set<string> {
   return new Set(namedFields(fields).map((field) => fieldMatchKey(field)));
 }
 
-// The gap behind every flagged connector: its id mapped to the fields its target
-// requires and nothing feeding that target guarantees. A connector is absent
-// from the map exactly when it isn't flagged, so the keys double as the flagged
+// The gap behind every flagged connector: its id mapped either to the fields
+// its target requires and nothing feeding that target guarantees, or — once
+// the target itself is covered — a lone `noContribution` marking an arrow
+// whose own source isn't part of what covers it. A connector is absent from
+// the map exactly when it isn't flagged, so the keys double as the flagged
 // set.
 //
 // Each target is judged once, over its whole fan-in: the sources pointing into
@@ -81,6 +103,14 @@ function fieldKeys(fields: Field[]): Set<string> {
 // there's no one arrow to pin it on. Every arrow into a target therefore reports
 // the *same* gaps — the gap is the fan-in's, not any one arrow's. Arrows into a
 // target that requires no fields are never flagged.
+//
+// When the pool does cover the target, each arrow is then judged on its own: a
+// source that supplies none of the target's required fields — not even
+// optionally, which counts as no contribution the same way it counts for
+// nothing in the pool above — is flagged with `noContribution`. Supplying just
+// *one* field the target needs clears the bar, so a source carrying its own
+// slice of a multi-event hydration is never caught by this; it only catches an
+// arrow that carries none of the target's fields at all.
 export function completenessGaps(
   elements: FieldedElement[],
   connectors: FlowConnector[],
@@ -143,12 +173,32 @@ export function completenessGaps(
       const alias = fieldAliasKey(field);
       if (guaranteed.has(own) || (alias && guaranteed.has(alias))) continue;
       missing.push({
+        kind: 'missing',
         key: formatField(field),
         optionalUpstream: optionally.has(own) || (!!alias && optionally.has(alias)),
       });
     }
-    if (missing.length === 0) continue;
-    for (const { id } of incoming) gaps.set(id, missing);
+    if (missing.length > 0) {
+      for (const { id } of incoming) gaps.set(id, missing);
+      continue;
+    }
+
+    // The fan-in as a whole covers the target — but a source that supplies
+    // none of what the target needs isn't pulling its weight just because some
+    // other arrow happens to. Judged against the source's own required set
+    // only: an optional match doesn't clear the bar here either, same as it
+    // never satisfied the pool above.
+    for (const { id, start } of incoming) {
+      const supplied = requiredById.get(start);
+      const contributes =
+        !!supplied &&
+        required.some((field) => {
+          const own = fieldMatchKey(field);
+          const alias = fieldAliasKey(field);
+          return supplied.has(own) || (!!alias && supplied.has(alias));
+        });
+      if (!contributes) gaps.set(id, NO_CONTRIBUTION);
+    }
   }
   return gaps;
 }
@@ -159,11 +209,17 @@ export function completenessGaps(
 // *does* carry, but only optionally, is spelled out instead: it's visibly there
 // on an upstream block, so listing it as absent would read as a lie. The
 // sentence names what's actually wrong — an optional supply can't meet a
-// required field. Shared by the render and the already-shows-it check so the two
-// can't drift.
+// required field. A no-contribution gap gets its own sentence — there's no
+// field to name, since the target isn't short of anything; the arrow itself is
+// what's flagged. Shared by the render and the already-shows-it check so the
+// two can't drift.
 function gapLines(missing: FieldGap[]): string[] {
-  return missing.map(({ key, optionalUpstream }) =>
-    optionalUpstream ? `Field "${key}" is required` : key,
+  return missing.map((gap) =>
+    gap.kind === 'noContribution'
+      ? 'Supplies none of the required fields'
+      : gap.optionalUpstream
+        ? `Field "${gap.key}" is required`
+        : gap.key,
   );
 }
 
