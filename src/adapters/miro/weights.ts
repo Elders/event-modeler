@@ -54,8 +54,14 @@ export type MiroOp =
   // Level 1, documented: createStickyNote, createText, createFrame, createShape,
   // createConnector and createCard all print Level 1. Only images are dearer.
   | 'create'
-  // INFERRED Level 1: `sync` prints no level anywhere. Non-image writes are
-  // priced with their documented Level 1 neighbours; images are `syncImage`.
+  // Level 1 — MEASURED, not documented. `sync` prints no level anywhere, which
+  // invites the reading that an undocumented method simply isn't rate limited.
+  // It is: bursting it against a real board drew a 429 after ~1,975 calls, and
+  // 100,000 credits/min / 1,975 = ~50.6 per call. Level 1, within the noise.
+  //
+  // Which settles the principle for the inferences below too — silence in the
+  // docs is an omission, not an exemption. Not worth re-deriving from the docs;
+  // they will still be silent.
   | 'sync'
   // getMetadata is documented Level 1. setMetadata prints no level and is
   // INFERRED to match it.
