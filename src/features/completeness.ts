@@ -9,8 +9,9 @@
 //
 // The caption overwrites whatever the arrow carried, and a hand-written one is
 // not preserved or restored (a deliberate product call — see DECISIONS.md).
-// Only arrows in the flag registry are ever written, so an arrow the check
-// never flagged keeps its caption untouched.
+// Only arrows this pass owns are ever written — one in the flag registry, or one
+// still painted our exact red — so an arrow the check never flagged keeps its
+// caption untouched.
 //
 // Fields are read from what's drawn on the board (sticky text / attached box),
 // not the em-fields registry: the registry is a lazily-populated cache that can
@@ -41,6 +42,23 @@ function isIncompleteColor(color: string | null): boolean {
   return typeof color === 'string' && color.toLowerCase() === INCOMPLETE_COLOR.toLowerCase();
 }
 
+// Takes the gap caption off an arrow this pass owns, on its way to forgetting it.
+//
+// Deliberately NOT gated on the snapshot's caption reading as present. Both
+// callers drop the arrow from the flag registry in the same breath, so this is
+// the last look either will ever get: a caption the read under-reports is a
+// caption stranded on the board forever, since the next pass sees an untracked,
+// un-red arrow and rightly leaves it alone. That is the shape the corollary in
+// CLAUDE.md warns about — never gate heal state on a step that may have failed —
+// and it applies to the *read* that decides whether to heal, not just the write.
+//
+// The write is idempotent and this runs only when an arrow's flag is dropped —
+// once per closed gap, not once per pass — so the redundant clear on an arrow
+// that carried no caption costs one sync on an arrow that just changed anyway.
+// A missed one is permanent.
+async function clearCaption(id: string): Promise<void> {
+  await services().canvas.setConnectorCaption(id, null);
+}
 
 let running = false;
 
@@ -106,11 +124,20 @@ async function checkCompleteness(): Promise<void> {
       // how the color reads back. Only arrows we flagged are cleared, so the
       // pass never strips a caption off an arrow it doesn't own.
       await canvas.setConnectorColor(connector.id, existing.original);
-      if (connector.caption !== null) await canvas.setConnectorCaption(connector.id, null);
+      await clearCaption(connector.id);
       changed = true;
     } else if (isIncompleteColor(connector.color)) {
-      // Red but untracked (reddened while em-flags couldn't be written) — restore.
+      // Red but untracked (reddened while em-flags couldn't be written) — restore
+      // the color, and take the caption off with it. Both are ours: nothing else
+      // paints an arrow this exact red, so the text riding it is a gap caption
+      // this pass wrote.
+      //
+      // Restoring only the color stranded that caption on a black arrow forever.
+      // This is the *last* pass that will ever look at the arrow — once it isn't
+      // red and isn't flagged, both branches above skip it and the caption is
+      // unreachable, indistinguishable from a hand-written one.
       await canvas.setConnectorColor(connector.id, DEFAULT_CONNECTOR_COLOR);
+      await clearCaption(connector.id);
       changed = true;
     }
   }
