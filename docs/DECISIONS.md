@@ -697,11 +697,28 @@ inferred at Level 1 — the reading their documented neighbours support — and
 `image.sync` is the known exception, priced from the tier description because
 that is the only place the docs say what updating an image costs.
 
-**Still unknown: batch cost.** Whether `board.get({ id: [40] })` costs 500 once or
-500 per item isn't stated anywhere, and `completeness.analyze` batches ids
-precisely to exploit the former. If that's wrong the figure is wrong by a large
-factor. The check that settles it: an idle board should tick the hourly bar up in
-~1,550-credit steps, the figure `domain/pacing` derives independently.
+**Settled by measurement: `board.get` bills once per call, not per item**
+(2026-07-17). This was the last open assumption — `completeness.analyze` batches
+ids specifically to exploit it, and if it billed per item the figure would have
+been wrong by a large factor. Measured on a real model (the Unite Manager board,
+several screens and connectors): a completeness pass reads **1.6k** on the
+per-minute bar, against the 1,550 that `domain/pacing` derives from the call
+count alone — 1,550 plus one 50-credit `getMeta` for a fields box. Two figures
+derived independently, agreeing to a rounding step. The batching works, the
+weights are right, and the pass cost does not scale with model size.
+
+Idle burn, measured over two 5-minute windows: **~48k credits/hour per open board
+tab** (a 1.6k pass every 120s), or ~4.8% of the hourly budget. The fixed 4s poll
+this replaced cost ~1.4M/hour — the activity-driven pacing is worth ~29x on an
+idle board.
+
+**A measuring trap worth knowing.** Both windows read 8k, not the 4k a single
+board script should spend, because the board was open in *two* tabs and the meter
+correctly summed both. That is the cross-frame design working — but when checking
+pass cost against a prediction, count the open board tabs first, or halve the
+answer without noticing. The per-minute bar is the honest instrument here: a
+single pass lands inside one second, so the minute window shows one pass's cost
+outright, at one-decimal precision below 10k.
 
 ## Workflow conventions
 
