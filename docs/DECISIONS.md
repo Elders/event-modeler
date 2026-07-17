@@ -479,8 +479,10 @@ board size, including an empty one.
 3. **The hourly 429 is not retried.** It used to burn 7 more calls over ~61s of a
    budget that was already gone. It now fails fast as `HostUnavailableError` and
    sets a cooldown.
-4. **Every loop stands down under the cooldown**, completeness included. It was
-   exempt on the grounds of being "light (a few reads)" — three `board.get`s is
+4. **Every loop stands down under the cooldown**, completeness included. (Every
+   loop *on this page*, as it turned out — the panel's own loops had no way to ask
+   and went on hammering a dead board until 2026-07-17; see the next section.) It
+   was exempt on the grounds of being "light (a few reads)" — three `board.get`s is
    not light. `isUnderRateLimit()` was `adaptiveGapMs >= 500`, a reasonable proxy
    for the per-minute limit and useless against the hourly one: the gap halves on
    every success and hits zero after ~8 calls, so the loops resumed within seconds
@@ -506,6 +508,91 @@ total per minute" and treats that as the thing to harden against. That is the
 burst ceiling only. The hourly budget is the one that actually bites, and the
 mitigations listed there (retries, adaptive pacing) are the *wrong* response to
 it — they spend more of it.
+
+## The panel had the same disease (2026-07-17)
+
+The section above fixed the **board script**. The panel was still on a fixed clock,
+and still paying for a selection it was handed for free. Found from an exported
+Console log after "a few minutes of work": 55 entries, every one an
+exhausted-budget failure. The board script appears in it **twice in 25 minutes** —
+the activity pacing works. The other 53 are the panel.
+
+**Reading the log — the cadence was an artifact, not a timer.** 45 of them fell in
+82 seconds (14:41:55 to 14:43:17), strictly alternating "Could not inspect the
+selection for conversion" / "Could not count adoptable images". After a brief
+cluster at the start they land at *exactly* 2.000s apart — 41 entries across 80
+seconds, to the millisecond. There is no 2s timer in the panel.
+
+That cadence is `pace()` in `adapters/miro/rateLimit`. On a 429 the adaptive gap
+ramps to `MAX_GAP_MS` (2,000) and **stays** there, because it only shrinks on
+success and nothing succeeds during an outage. `nextSlot` then hands out one slot
+every 2s, globally, FIFO — so the two sections' calls interleave, and the
+timestamps are **drain times, not request times**: a backlog of already-doomed
+calls dequeuing at 0.5/s. Each click enqueued 4 calls (8s of queue) while the
+queue drained one click's worth per 8s, so clicking more often than every 8s grew
+the backlog without bound.
+
+Worth remembering when reading any future log: **a perfectly regular cadence may
+be the limiter's queue draining, not a poll.** Don't go hunting for a timer that
+matches it.
+
+**What the panel was spending.** Same weights as the table above —
+`board.getSelection` is **500, Level 3**, exactly like `board.get`.
+
+| Path | Cost | Rate |
+| --- | --- | --- |
+| Fields watch, fixed 2.5s `board.get` | 500/tick | **720,000/hour** — 72% of budget, one block selected, nobody touching anything |
+| Build tab, per selection change: 2 sections x (immediate + 900ms settle) `getSelection` | 2,000/click | ~8 clicks/min saturates the entire hourly budget |
+| Fields failure retry, every 15s while the failure is on screen | ~500+/retry | ~130,000/hour, **unbounded**, into a board that had just said it has none |
+
+**The panel already had the selection, for free.** `useSelection` subscribes to
+`selection:update` — a push event, zero credits — and hands `{id, kind}` to the
+sections. `ConvertSection` used those items *only to build a cache key*, then
+called `inspectSelection()`, which re-read the same selection at 500 credits.
+`BuildingBlocksSection` did the same. The free payload was always sufficient:
+`convertibleFrames` filters on `kind === 'container'`, `adoptableImages` on
+`kind === 'image'` plus a 50-credit `getMeta`. **Before adding a read, check what
+the free push event already gave you.**
+
+**"Poll slowly" was written as if the read were free.** The Fields watch's own
+comment called 2.5s "a relaxed cadence [that] keeps it from being a constant
+drain on the shared API budget". At 500 credits a tick that was 12,000/min.
+Seconds are not the unit that matters — **credits/hour is**. Any comment
+justifying a poll interval should state the per-hour cost, or it is just a feeling.
+
+**The fixes**, in order of what they bought:
+
+1. **The Fields watch rides `domain/pacing`** like the board's passes, with the
+   panel regaining **focus** as its free signal — board edits happen while the
+   panel is blurred, and a stale panel only matters once you look back at it. The
+   120s idle fallback is the same safety net, for a collaborator's edit.
+   720,000 -> ~15,000/hour.
+2. **The hint counts take the selection as an argument** instead of re-reading it.
+   2,000 -> 0 credits per click; the 900ms settle re-check survives but now costs
+   `getMeta` (50), not `getSelection` (500).
+3. **The panel stands down under the cooldown.** The board script honoured
+   `isUnderRateLimit()`; the panel had no way to ask, because the gate lives in the
+   Miro adapter and the panel may not import adapters. It is now a `Canvas` port
+   method next to `setBulkMode` — that port already modelled rate limiting from the
+   write side — reached from the panel through `features/hostStatus`. The
+   unbounded 15s failure retry is what this actually saves; everything else in the
+   panel is bounded by clicks.
+
+**Each page has its own cooldown.** The board script and the panel are separate
+iframes with separate module instances, so `rateLimit`'s state is per-page (the
+same reason `setBulkWrites` in the panel only paces the panel). The panel stands
+down on its *own* first 429 rather than inheriting the board's. One probe call is
+cheap; a shared gate would need a channel, and isn't worth it.
+
+**Accepted trade-off (flagged, then shipped, 2026-07-17).** The Fields tab no
+longer updates live while you type onto a block with the panel blurred: it
+refreshes ~2s after the panel regains focus, or within 120s via the fallback. You
+are looking at the block, not at the panel, while you type — and that is what buys
+the 48x.
+
+**Rejected: gating the Build tab hints too.** After fix 2 they cost `getMeta` and
+registry reads only, when frames or images are selected, bounded by clicks. Gating
+them would freeze the hint into a silent lie for a rounding error.
 
 ## Workflow conventions
 
