@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { failureReason, reportToLog } from '../features/diagnostics';
+import { isBoardRateLimited } from '../features/hostStatus';
 import type { SelectionItem } from '../ports/runtime';
 import { services } from '../services';
 
@@ -52,6 +53,13 @@ export function useSelection(): SelectionState {
 
     const seed = () => {
       if (cancelled || live) return;
+      // Stand down while the board is asking to be left alone. Several sections
+      // use this hook at once, so a rate-limited board otherwise takes one doomed
+      // 500-credit read per instance per cycle, spending a budget that has
+      // already run out. The failure already on screen stays on screen; the first
+      // seed after the cooldown lapses is the probe. A user click supersedes all
+      // of it for free (selection:update is a push).
+      if (isBoardRateLimited()) return;
       void canvas
         .selection()
         .then((elements) => {

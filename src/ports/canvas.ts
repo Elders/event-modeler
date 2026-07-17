@@ -191,6 +191,18 @@ export interface Canvas {
   // so a Pause isn't drawn out by the remaining gaps.
   setBulkMode(on: boolean, signal?: AbortSignal): void;
 
+  // Whether the host has recently refused work and wants to be left alone —
+  // the read side of the same concern as setBulkMode above.
+  //
+  // Every background loop asks before it runs and stands down if so: the budget
+  // it would spend is already gone, and asking again only makes the outage
+  // longer. Work the user actually asked for pushes through regardless, and
+  // fails with a real message rather than silently.
+  //
+  // This is a live question about the host, not a property of any one call — so
+  // it never throws and never blocks. False where there is no limit at all.
+  isUnderRateLimit(): boolean;
+
   // Selection and references.
   deselect(): Promise<void>;
   deepLink(id: string): Promise<string | null>;

@@ -19,6 +19,7 @@ import { BLOCKS, type BlockType } from '../domain/vocabulary';
 import { completenessHousekeeping } from '../features/completeness';
 import { failureReason, reportToLog } from '../features/diagnostics';
 import { reportError } from '../features/helpers';
+import { isBoardRateLimited } from '../features/hostStatus';
 import { findFieldsBox } from '../features/fields/board';
 import { setFields as saveFields } from '../features/fields/edit';
 import { resolveFieldTargets, type FieldTarget } from '../features/fields/recognize';
@@ -125,9 +126,17 @@ export function FieldsSection() {
   // Retry a failed read on its own, so a board that comes back (credits refill,
   // network returns) heals the tab without the user having to re-click anything.
   // Only while failed — there is nothing to retry otherwise.
+  //
+  // Stood down while the board is asking to be left alone: the failure this
+  // retries is usually an exhausted credit budget, so retrying into it spends
+  // more of what already ran out. The timer keeps ticking (it is free) and the
+  // first attempt after the cooldown lapses is the probe.
   useEffect(() => {
     if (!failure) return;
-    const timer = window.setInterval(() => setAttempt((n) => n + 1), RETRY_MS);
+    const timer = window.setInterval(() => {
+      if (isBoardRateLimited()) return;
+      setAttempt((n) => n + 1);
+    }, RETRY_MS);
     return () => clearInterval(timer);
   }, [failure]);
 
@@ -170,7 +179,9 @@ export function FieldsSection() {
     };
 
     const read = async () => {
-      if (editingInPanel()) return;
+      // Nothing here is work the user asked for — it is the watch keeping itself
+      // fresh — so it stands down rather than spending a budget that's gone.
+      if (editingInPanel() || isBoardRateLimited()) return;
       // Stamped even if the read below fails: a board that won't answer
       // shouldn't be asked again on the next check.
       lastRead = Date.now();
@@ -336,7 +347,10 @@ export function FieldsSection() {
         >
           Retry
         </button>
-        <p className="footnote">Retrying on its own every 15 seconds. See the Console tab.</p>
+        {/* Not "every 15 seconds" any more: the retry stands down while the board
+            is asking to be left alone, so the true gap is however long that lasts.
+            Retry pushes through regardless — it's a thing the user asked for. */}
+        <p className="footnote">Retrying on its own. See the Console tab.</p>
       </section>
     );
   }

@@ -21,7 +21,7 @@ import type {
   TextSpec,
 } from '../../ports/canvas';
 import { META_KEY } from './meta';
-import { setBulkWrites, withRateLimit } from './rateLimit';
+import { isUnderRateLimit as underRateLimit, setBulkWrites, withRateLimit } from './rateLimit';
 
 type LiveItem = Awaited<ReturnType<typeof miro.board.get>>[number];
 
@@ -509,6 +509,10 @@ export class MiroCanvas implements Canvas {
     // signal), so Pause is prompt even mid-write; the build still stops at its
     // next boundary.
     setBulkWrites(on, signal);
+  }
+
+  isUnderRateLimit(): boolean {
+    return underRateLimit();
   }
 
   async deselect(): Promise<void> {

@@ -15,7 +15,7 @@
 
 import { createDiagnostics } from './adapters/browser';
 import { createMiroServices } from './adapters/miro';
-import { isUnderRateLimit } from './adapters/miro/rateLimit';
+import { isBoardRateLimited } from './features/hostStatus';
 import {
   FALLBACK_CHECK_MS,
   SETTLE_MS,
@@ -85,7 +85,7 @@ let lastHeavyPass = 0;
 // can't throw here. `lastPass` is stamped even if the pass fails — a board that
 // won't answer shouldn't be asked again 15 seconds later.
 async function runCompleteness(): Promise<void> {
-  if (isUnderRateLimit()) return;
+  if (isBoardRateLimited()) return;
   lastPass = Date.now();
   await completenessHousekeeping();
 }
@@ -96,7 +96,7 @@ async function runPasses(): Promise<void> {
   // The cleanup/reflow/copy-sync passes cost more and are only a fallback (the
   // fast selection watcher handles the interactive cases), so they don't run on
   // every settle — every edit would otherwise re-read every frame on the board.
-  if (isUnderRateLimit() || !heavyPassesDue(Date.now(), lastHeavyPass)) return;
+  if (isBoardRateLimited() || !heavyPassesDue(Date.now(), lastHeavyPass)) return;
   lastHeavyPass = Date.now();
   await specHousekeeping();
   await fieldsHousekeeping();
@@ -137,7 +137,7 @@ if (!window.__emHousekeepingRegistered) {
   // that already ran them, and their repairs are board state everyone else sees.
   // Dragging them along here would double the idle cost for nothing.
   setInterval(() => {
-    if (isUnderRateLimit() || !fallbackDue(Date.now(), lastPass)) return;
+    if (isBoardRateLimited() || !fallbackDue(Date.now(), lastPass)) return;
     void runCompleteness();
   }, FALLBACK_CHECK_MS);
 }
