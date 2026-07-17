@@ -6,7 +6,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createAnthropicPlanner } from './adapters/anthropic';
-import { createDiagnostics } from './adapters/browser';
+import { createCreditMeter, createDiagnostics } from './adapters/browser';
 import { createMiroServices } from './adapters/miro';
 import { registerDrop } from './features/registerDrop';
 import { Panel } from './panel/Panel';
@@ -15,11 +15,18 @@ import './style.css';
 
 // The panel page wires the Miro adapter set plus the Claude-backed Planner used
 // by the "generate from text" feature. The board script (src/index.ts) omits
-// the Planner — it has no use for it. Diagnostics is wired by both, tagged with
-// which page it is; this one also renders the log, in the Console tab.
+// the Planner — it has no use for it. Diagnostics and the credit meter are wired
+// by both, tagged with which page it is; this one also renders them both, in the
+// Console tab.
+//
+// The panel counts its own spend (generation bursts through here) but is not the
+// meter's writer to storage — the board page is, being the one alive for the
+// whole session.
+const credits = createCreditMeter('panel');
 configureServices({
-  ...createMiroServices(),
+  ...createMiroServices(credits),
   diagnostics: createDiagnostics('panel'),
+  credits,
   planner: createAnthropicPlanner(),
 });
 registerDrop();

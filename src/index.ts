@@ -13,7 +13,7 @@
 // This entry only wires ports to use-cases. Swapping `createMiroServices` for
 // another adapter set is all it takes to host the tool on a different canvas.
 
-import { createDiagnostics } from './adapters/browser';
+import { createCreditMeter, createDiagnostics } from './adapters/browser';
 import { createMiroServices } from './adapters/miro';
 import { isBoardRateLimited } from './features/hostStatus';
 import {
@@ -45,7 +45,19 @@ declare global {
 // This page's failures are the ones nobody could see: it has no UI, and its
 // housekeeping loops run with the panel closed. Its entries carry the 'board'
 // tag and reach the panel's Console tab over the diagnostics channel.
-configureServices({ ...createMiroServices(), diagnostics: createDiagnostics('board') });
+//
+// The credit meter is the same story told in numbers. This page does nearly all
+// of the spending — the passes below run whether or not anyone is watching — so
+// its ring is the one that matters, and it reaches the Console over a channel of
+// its own. It is also the meter's single writer to storage, which is what lets
+// the hour's spend survive the board refresh that usually follows things going
+// wrong.
+const credits = createCreditMeter('board');
+configureServices({
+  ...createMiroServices(credits),
+  diagnostics: createDiagnostics('board'),
+  credits,
+});
 
 const { runtime } = services();
 runtime.onIconClick(() => void runtime.openPanel('app.html'));

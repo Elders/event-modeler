@@ -30,7 +30,9 @@
 // Centralizing this means no caller can bypass it: a new adapter method is rate
 // limited simply by going through `withRateLimit`.
 
+import type { CreditMeter } from '../../ports/credits';
 import { HostUnavailableError } from '../../ports/errors';
+import { WEIGHT, type MiroOp } from './weights';
 
 // Backoff schedule for a call that 429s despite pacing. Generous tail so a bulk
 // run rides out even a per-minute window rather than giving up partway. Only
@@ -61,6 +63,17 @@ let nextSlot = 0;
 const BULK_GAP_MS = 500;
 let bulkGapMs = 0;
 let bulkAborting = false;
+
+// Where spend is reported. Set once at wiring time by createMiroServices, and
+// null until then — which simply means nothing is counted. The limiter's own
+// behaviour does not depend on it and must not: the meter is a gauge, and the
+// moment it could throttle anything, a figure that is only ever an estimate
+// would start causing outages it couldn't explain.
+let meter: CreditMeter | null = null;
+
+export function setCreditMeter(next: CreditMeter): void {
+  meter = next;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -105,9 +118,19 @@ async function pace(): Promise<void> {
   if (wait > 0) await sleep(wait);
 }
 
-export async function withRateLimit<T>(fn: () => Promise<T>): Promise<T> {
+// `op` names what is about to be called, and exists only so its price can be
+// looked up — the limiter itself treats every call the same. Passing it at the
+// call site is what makes the Console's figure possible at all: this function
+// takes an opaque thunk, so without the name a 500-credit board.get and a
+// 50-credit sync are indistinguishable from here.
+export async function withRateLimit<T>(op: MiroOp, fn: () => Promise<T>): Promise<T> {
   await pace();
   for (let attempt = 0; ; attempt++) {
+    // Charged before the call, and again on each retry: credits are spent by
+    // making the request, not by it succeeding. Whether Miro debits a request it
+    // answers with a 429 is undocumented, so this counts it — over-counting a
+    // storm is the harmless direction, and the storm is what the figure is for.
+    meter?.charge(WEIGHT[op]);
     try {
       const result = await fn();
       if (adaptiveGapMs > 0) adaptiveGapMs = shrink(adaptiveGapMs);
@@ -117,7 +140,18 @@ export async function withRateLimit<T>(fn: () => Promise<T>): Promise<T> {
       adaptiveGapMs = grow(adaptiveGapMs); // throttle everything that follows
       const window = rateLimitWindow(error);
       const exhausted = window === 'hour';
-      cooldownUntil = Date.now() + (exhausted ? COOLDOWN_HOUR_MS : COOLDOWN_MINUTE_MS);
+      const refusedAt = Date.now();
+      cooldownUntil = refusedAt + (exhausted ? COOLDOWN_HOUR_MS : COOLDOWN_MINUTE_MS);
+
+      // The one measured fact in the whole meter: the host itself said no. Only
+      // recorded when Miro named the window — unrecognised wording is handled as
+      // transient below, and marking an exhaustion we can't name would be
+      // inventing the very thing this is here to be certain about.
+      //
+      // What makes it worth surfacing is the comparison. The estimate beside a
+      // real refusal either agrees, or it doesn't — and a bar reading 8% next to
+      // a genuine 429 says the budget is going somewhere this app cannot see.
+      if (window) meter?.markExhausted({ window, atMs: refusedAt, untilMs: cooldownUntil });
 
       // The hourly budget does not refill in seconds, so retrying it is not
       // riding out a blip — it is spending more of a budget that has already run

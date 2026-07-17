@@ -7,6 +7,7 @@
 // matter of writing new adapters and calling `configureServices` with them.
 
 import type { Canvas } from './ports/canvas';
+import type { CreditMeter } from './ports/credits';
 import type { Diagnostics } from './ports/diagnostics';
 import type { Notifier } from './ports/notifier';
 import type { Planner } from './ports/planner';
@@ -23,6 +24,11 @@ export interface Services {
   // Where a supervisor sends the failure it caught. Both pages wire one; each
   // tags its entries with which page it is, since they are separate iframes.
   diagnostics: Diagnostics;
+  // How much of the host's API budget this app has spent. Both pages wire one —
+  // they spend a single budget between them and each has to count its own share
+  // — and unlike the planner it is not optional: the board script does most of
+  // the spending, so a meter it didn't feed would report almost nothing.
+  credits: CreditMeter;
   // Optional: only the panel page wires a Planner. The always-on board script
   // has no use for it, so it stays free of the AI adapter (and its bundle).
   planner?: Planner;

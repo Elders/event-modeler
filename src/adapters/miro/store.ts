@@ -15,12 +15,12 @@ import { withRateLimit } from './rateLimit';
 
 export class MiroStore implements Store {
   async read<T>(key: string, fallback: T): Promise<T> {
-    const value = await withRateLimit(() => miro.board.getAppData(key));
+    const value = await withRateLimit('appData', () => miro.board.getAppData(key));
     return (value ?? fallback) as T;
   }
 
   async write(key: string, value: unknown): Promise<void> {
-    await withRateLimit(() =>
+    await withRateLimit('appData', () =>
       miro.board.setAppData(key, value as Parameters<typeof miro.board.setAppData>[1]),
     );
   }

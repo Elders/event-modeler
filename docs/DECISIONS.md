@@ -594,6 +594,115 @@ the 48x.
 registry reads only, when frames or images are selected, bounded by clicks. Gating
 them would freeze the hint into a silent lie for a rounding error.
 
+## The credit meter is an estimate, and says so (2026-07-17)
+
+The two sections above diagnosed the budget by arithmetic on paper, after the
+fact, twice. The Console tab now carries two bars — spend in the last minute
+against 100k, in the last hour against 1M — so the question "is the budget going,
+and is it us?" has an answer on screen instead of in this file.
+
+**Miro reports usage — but not to the Web SDK.** This is worth stating precisely,
+because the obvious objection is "surely there's a header". There is:
+[every REST API response](https://developers.miro.com/reference/rate-limiting#monitoring-rate-limits)
+carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`. But
+those are HTTP response headers, and the Web SDK never hands us an HTTP response
+— calls are proxied through Miro's iframe host and return resolved promises. The
+[SDK's own rate-limiting page](https://developers.miro.com/docs/websdk-reference-rate-limiting)
+documents no headers, no usage query, and no warning before the limit: "If your
+app exceeds a limit, it receives an error." The numbers exist and are out of
+reach from here.
+
+Reaching them would mean calling `api.miro.com` ourselves with an OAuth token
+this app doesn't hold, through CORS that isn't set up for it, and spending
+credits to measure credits. Not worth it for a gauge.
+
+So the bar is **counted, not read**: every call goes through `withRateLimit`,
+which takes an op name, looks its price up in `adapters/miro/weights.ts`, and
+charges a meter.
+
+**Which makes it an estimate, and collides with the rule above it.** A smooth bar
+labelled "credits remaining" would be exactly the plausible-looking unmeasured
+value this codebase refuses to produce — and wrong in the one case it exists for,
+a bot eating the budget while our own spend is nil. The resolutions:
+
+- It is labelled **"API credits spent by this app"**, never "remaining", and
+  carries a footnote naming exactly what it cannot see. Rate limiting is
+  [per user per application](https://developers.miro.com/reference/rate-limiting),
+  so other Miro apps don't draw on this budget at all; board tabs in the same
+  browser are counted (same origin, same BroadcastChannel). The real gaps are
+  this app in *another* browser or device, and a REST integration using its
+  credentials.
+- **The 429 is still the only ground truth**, and it is shown beside the
+  estimate. `markExhausted` records Miro's actual refusal and the real cooldown;
+  the panel renders it as its own band. A bar reading 8% next to a genuine
+  refusal is the whole diagnostic payload — it says *it isn't us*.
+
+**Rejected: pre-emptive throttling.** The obvious next step — stand the loops
+down as the estimate nears the budget, rather than waiting for the 429 — was
+declined. An over-estimate would then stand the tool down for no reason, and that
+failure has no symptom: the board goes quiet and nothing says why. A gauge that
+is only ever approximately right must not be a control. The 429 remains the only
+thing in the codebase that throttles anything.
+
+**Rejected: a per-operation breakdown** (`board.get x412 = 206k`). More
+diagnostic, and worth revisiting — the op name is already threaded through, so it
+is a later component and not a later refactor.
+
+**Design notes that cost something to learn:**
+
+- **Charges are bucketed per second**, not kept per call: an hour is then at most
+  3600 buckets however hard the board is worked, which bounds memory and the
+  persisted payload at once.
+- **A sliding window has no reset moment**, so there is no honest countdown to
+  one. `recoveryAt` answers the answerable question instead — when enough charges
+  have aged out for the sum to fit again.
+- **Rings are per source, and a source is one page *load***. The board script and
+  the panel spend one budget from two iframes, so the figures must sum; keying by
+  source is what stops a page's own re-broadcast being counted twice. A *load*
+  rather than a page because a reloaded board page takes a new id, leaving its
+  pre-refresh ring intact beside the new one — those credits were really spent
+  and still count against the hour. Dead loads' rings age out by themselves.
+- **Persistence is unconditional**, unlike the log's opt-in: refreshing the board
+  is what people do when it stops responding, so an hourly figure that zeroed on
+  refresh would be blank exactly when wanted.
+- **The meter costs no credits to run** — in-process counting, a BroadcastChannel,
+  a 1s local timer. Same reasoning as the diagnostics log: the thing reporting on
+  an exhausted budget must not spend it.
+
+### The weights are documented per method — read them, don't infer (2026-07-17)
+
+The first cut of `weights.ts` inferred half its table from the tier descriptions
+and flagged the guesses. Most of the guesses were right, one was wrong, and none
+of them needed to be guesses: **every element page in the
+[SDK reference](https://developers.miro.com/docs/sdk-reference) prints the level
+under each method** ("🚦 Rate limit: Level 3"). Check there first.
+
+Confirmed against the docs, and already correct: `board.get`, `board.getSelection`
+and `frame.getChildren` are Level 3; `createImage` is Level 3; every other create
+(`createStickyNote`/`Frame`/`Shape`/`Text`/`Connector`/`Card`) is Level 1; so are
+`group`, `ungroup`, `remove`, `deselect`, `getInfo`, `getAppData`, `getById` and
+`getMetadata`.
+
+**Wrong, and now fixed: `image.sync` is Level 3, not Level 1.** The tier
+description is "create **or update** an image or an embed item" — updating an
+image costs the same 500 as creating one. Screens and automations *are* images
+(grouped title-text + image pairs), so the spec reflow and slice re-dock passes
+move images by the handful and were being counted at a tenth of their price —
+under-counting precisely the unattended work the meter exists to watch.
+`MiroCanvas.syncOpFor` now prices a sync by the item's type.
+
+**The docs' one consistent gap: write methods print no level at all.** `sync`,
+`setMetadata`, `setAppData` and `frame.add` show none on any item type. They stay
+inferred at Level 1 — the reading their documented neighbours support — and
+`image.sync` is the known exception, priced from the tier description because
+that is the only place the docs say what updating an image costs.
+
+**Still unknown: batch cost.** Whether `board.get({ id: [40] })` costs 500 once or
+500 per item isn't stated anywhere, and `completeness.analyze` batches ids
+precisely to exploit the former. If that's wrong the figure is wrong by a large
+factor. The check that settles it: an idle board should tick the hourly bar up in
+~1,550-credit steps, the figure `domain/pacing` derives independently.
+
 ## Workflow conventions
 
 - **master is the production branch.** Every push to master builds and

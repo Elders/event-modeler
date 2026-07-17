@@ -1,0 +1,118 @@
+/* The credit meter above the Console log. Deliberately quiet: this is reference
+   material for when something is already wrong, not a dashboard to watch. */
+
+.credits {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--em-line);
+}
+
+.credits-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--em-muted);
+}
+
+.credits-row + .credits-row {
+  margin-top: 8px;
+}
+
+.credits-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.credits-label {
+  font-size: 10px;
+  color: var(--em-hint);
+}
+
+.credits-figure {
+  margin-left: auto;
+  font-size: 10px;
+  /* Tabular, or the figure jitters sideways on every tick. */
+  font-variant-numeric: tabular-nums;
+  color: var(--em-muted);
+}
+
+.credits-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--em-line);
+  overflow: hidden;
+}
+
+.credits-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--em-purple-light);
+  /* Turns the once-a-second tick into a slide instead of a jump. */
+  transition: width 300ms ease-out;
+}
+
+/* At 90% of the budget, and anywhere past it. Width barely carries the warning
+   on its own — 90% and 100% are two pixels apart at this size, and both just
+   look like "a full bar" — so colour does the work, with the figure beside it
+   and the accessible name saying the same thing without relying on it. */
+.credits-fill-high {
+  background: var(--em-error);
+}
+
+.credits-recovery {
+  margin: 3px 0 0;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--em-muted);
+}
+
+/* Miro's own refusal: the one measured fact here, so it carries weight the
+   estimates above it deliberately don't. */
+.credits-refusal {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--em-error);
+  border-radius: 3px;
+  background: #fdf0f1;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--em-ink);
+}
+
+.credits-note {
+  margin: 8px 0 0;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--em-hint);
+}
+
+/* What the figure does and doesn't take in. A list rather than a sentence: these
+   are two facts to check, not a paragraph to read, and running them together is
+   what made the prose version unclear. */
+.credits-scope {
+  margin: 5px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--em-hint);
+}
+
+.credits-scope li {
+  /* Hangs the wrapped text under its own label rather than back at the margin,
+     so the two entries stay visually separate in a narrow panel. */
+  padding-left: 8px;
+  text-indent: -8px;
+}
+
+.credits-scope li + li {
+  margin-top: 3px;
+}
+
+.credits-scope-in,
+.credits-scope-out {
+  font-weight: 500;
+  color: var(--em-muted);
+}

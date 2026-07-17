@@ -8,6 +8,7 @@
 
 import './ConsoleSection.css';
 import { useEffect, useState } from 'react';
+import { CreditsMeter } from './CreditsMeter';
 import {
   clearLog,
   entryAsJson,
@@ -180,6 +181,11 @@ export function ConsoleSection() {
         Failures recorded on the board script and this panel. Export this when something needs
         troubleshooting.
       </p>
+
+      {/* Above the log because it answers the question the log usually raises:
+          a rate-limit failure below reads very differently depending on whether
+          this app spent the budget or something else did. */}
+      <CreditsMeter />
 
       <div className="log-actions">
         <button
