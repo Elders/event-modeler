@@ -23,6 +23,15 @@ export interface Field {
   // An optional field renders with a "?" after its type and is never required
   // by the completeness check.
   optional?: boolean;
+  // The upstream field name this one is fed by, when it differs: a read model's
+  // "a" supplied by an event's "b" is `{ name: 'a', from: 'b' }`, rendered
+  // "b > a : string" — source first, in the direction the data travels. Purely
+  // an *intake* alias for the completeness check — it widens what satisfies this
+  // field, and changes nothing about what the block supplies downstream (see
+  // fieldMatchKey / fieldAliasKey). The type is not aliased: "b > a" means the
+  // upstream b of this field's own type, so a type difference stays a real gap
+  // rather than an implicit conversion.
+  from?: string;
 }
 
 // The type options offered in the editor, in display order.
@@ -41,11 +50,15 @@ export const FIELD_TYPES: { value: FieldType; label: string }[] = [
 // it's only a React key / edit target, regenerated on read (see
 // normalizeFieldRecords) — which keeps the registry small against the tight
 // app-data budget. `customType` is kept only for the custom type (always a
-// string, never `undefined`, which the Miro app-data store rejects).
+// string, never `undefined`, which the Miro app-data store rejects). `from` is
+// kept only when it names something: the editor's alias toggle turns it on as an
+// empty string, which is a UI state, not an alias.
 export function storableField(field: Field): Omit<Field, 'id'> {
   const base: Omit<Field, 'id'> = { name: field.name, type: field.type };
   if (field.type === 'custom') base.customType = field.customType ?? '';
   if (field.optional) base.optional = true;
+  const from = fieldAlias(field);
+  if (from) base.from = from;
   return base;
 }
 
@@ -61,21 +74,37 @@ export function newField(): Field {
   return { id: newFieldId(), name: '', type: 'string' };
 }
 
-// The separator between a field's name and its type on every display line:
-// "name : type". A name therefore cannot contain one — the parsers read
-// everything after the first colon as the type label, so a field named "a:b"
-// renders as "a:b : string" and reads back as the field "a", of a custom type
-// called "b : string". The name is silently gone.
+// The arrow between the upstream name a field is fed by and the field's own
+// name: the display line is "from > name : type", source first, pointing the way
+// the data travels. One ASCII character, because a sticky's text is the store
+// and is edited directly on the board — the rendered form is the form people
+// have to type. The panel's toggle button shows "→" instead: it's clicked, never
+// typed, so the glyph costs nothing there and reads better.
 //
-// So a colon is not a valid character in a field name, and is rejected at every
-// door a name can come in by: the panel's input and the generator's trust
-// boundary. It cannot arrive from the board — parseFieldLine splits the name off
-// at that colon, so what it yields never contains one.
+// Nothing parses "←", "<-" or "<". None was ever deployed, so no board carries
+// them and there is no legacy to support.
+//
+// ">" is also the safer of the two brackets here: stripHtml's tag regex only
+// starts matching at a "<", so a stray ">" on a line can never be mistaken for
+// the tail of a tag.
+const ALIAS_ARROW = '>';
+
+// The two separators on a display line — "from > name : type" — and so the two
+// things a *name* cannot contain. The parsers split on both, so a field named
+// "a:b" renders as "a:b : string" and reads back as the field "a" of a custom
+// type called "b : string"; one named "a>b" reads back as the field "b" fed by
+// "a". Either way the name is silently gone.
+//
+// So neither is a valid name character, and both are stripped at every door a
+// name can come in by: the panel's name and "fed by" inputs, and the generator's
+// trust boundary. Neither can arrive from the board — parseFieldLine splits the
+// name off at them, so what it yields never contains one.
 //
 // Type labels are deliberately unaffected: everything past the first colon is
-// already the label, so a custom type may contain colons and round-trips fine.
+// already the label, so a custom type may contain colons — or an arrow — and
+// round-trips fine.
 export function cleanFieldName(name: string): string {
-  return name.replace(/:/g, '');
+  return name.replace(/[:>]/g, '');
 }
 
 // The type as shown on the board: the custom name when custom, 'UUID' upcased,
@@ -93,14 +122,39 @@ export function fieldTypeLabel(field: Field): string {
 // completeness check matches fields on this key, but reads optionality
 // separately on both sides — an optional field neither has to be supplied nor
 // supplies anything.
+//
+// Deliberately blind to `from`: an alias is what this field *accepts*, never
+// what it is. A read model whose "a" is fed by an event's "b" still supplies
+// "a : string" to everything downstream of it — aliases don't propagate, or a
+// rename declared once would follow the data across the whole board.
 export function fieldMatchKey(field: Field): string {
   return `${field.name} : ${fieldTypeLabel(field)}`;
 }
 
-// One field as a single display line: "name : type", with a "?" after the
+// The alias a field declares, or '' when it declares none. Trimmed, so the
+// editor's "toggled on but not yet typed into" state reads as no alias.
+export function fieldAlias(field: Field): string {
+  return field.from?.trim() ?? '';
+}
+
+// The *other* key that satisfies this field, when it names an upstream field of
+// a different name: "from : type", or null when there's no alias. The type is
+// the field's own — "b > a" means the upstream b of *this field's* type, so a
+// required "a : string" fed by "b" is satisfied by an upstream "b : string" and
+// still not by "b : number". An alias bridges a naming difference, nothing else.
+export function fieldAliasKey(field: Field): string | null {
+  const from = fieldAlias(field);
+  return from ? `${from} : ${fieldTypeLabel(field)}` : null;
+}
+
+// One field as a single display line: "name : type" — or "from > name : type"
+// when it's fed by a differently-named upstream field — with a "?" after the
 // type when the field is optional.
 export function formatField(field: Field): string {
-  return field.optional ? `${fieldMatchKey(field)}?` : fieldMatchKey(field);
+  const from = fieldAlias(field);
+  const name = from ? `${from} ${ALIAS_ARROW} ${field.name}` : field.name;
+  const line = `${name} : ${fieldTypeLabel(field)}`;
+  return field.optional ? `${line}?` : line;
 }
 
 // The fields as the board will read them back once these are rendered onto it —
@@ -117,10 +171,11 @@ export function asDisplayed(fields: Field[]): Field[] {
 }
 
 // Whether two field lists carry the same fields in the same order — name, type,
-// custom type name, and optionality all equal. Ids are ignored: they're
-// per-session edit keys, not identity. Used to decide whether a board-side
-// display and the registry actually disagree before adopting or rewriting
-// anything.
+// custom type name, alias, and optionality all equal. Ids are ignored: they're
+// per-session edit keys, not identity. The alias is compared through fieldAlias
+// so an untyped-into '' matches the absent one it renders as. Used to decide
+// whether a board-side display and the registry actually disagree before
+// adopting or rewriting anything.
 export function sameFields(a: Field[], b: Field[]): boolean {
   return (
     a.length === b.length &&
@@ -129,6 +184,7 @@ export function sameFields(a: Field[], b: Field[]): boolean {
         field.name === b[index].name &&
         field.type === b[index].type &&
         (field.customType ?? '') === (b[index].customType ?? '') &&
+        fieldAlias(field) === fieldAlias(b[index]) &&
         (field.optional ?? false) === (b[index].optional ?? false),
     )
   );
@@ -195,21 +251,42 @@ function linesToFields(lines: string[], existing: Field[]): Field[] {
 }
 
 function parseFieldLine(line: string): Field {
-  // Split on the first colon: the name is everything before it, the type label
-  // everything after. This keeps an empty name empty — a line like ": string"
-  // that lost its leading space when the HTML round-trip trimmed it — and still
-  // leaves any colon inside a custom type label on the label side.
+  // Split on the first colon: the name half is everything before it, the type
+  // label everything after. This keeps an empty name empty — a line like
+  // ": string" that lost its leading space when the HTML round-trip trimmed it —
+  // and still leaves any colon inside a custom type label on the label side.
   const colon = line.indexOf(':');
-  if (colon < 0) return { id: newFieldId(), name: line.trim(), type: 'string' };
-  const name = line.slice(0, colon).trim();
+  if (colon < 0) return { id: newFieldId(), ...splitAlias(line), type: 'string' };
   // A trailing "?" is the optional marker, not part of the type label — so a
   // custom type whose own name ends in "?" reads back as that type, optional.
   let label = line.slice(colon + 1).trim();
   const optional = label.endsWith('?');
   if (optional) label = label.slice(0, -1).trim();
-  const field: Field = { id: newFieldId(), name, ...typeFromLabel(label) };
+  const field: Field = {
+    id: newFieldId(),
+    ...splitAlias(line.slice(0, colon)),
+    ...typeFromLabel(label),
+  };
   if (optional) field.optional = true;
   return field;
+}
+
+// The name half of a display line, split at the alias arrow: "b > a" is the
+// field "a" fed by "b" — the source is on the left, the field's own name on the
+// right. Split at the *first* arrow, mirroring the colon, so the leftmost
+// separator always wins and a second one lands in the *name* — where it is then
+// stripped by the name cleaning, exactly as a stray colon is.
+//
+// `from` is left off entirely when there's nothing before the arrow, so a
+// stray "> a" parses back as the plain field "a" rather than one carrying an
+// empty alias. A half-typed "b >" is the mirror case and yields the alias with
+// an empty name, which every caller already drops as nameless.
+function splitAlias(half: string): { name: string; from?: string } {
+  const arrow = half.indexOf(ALIAS_ARROW);
+  if (arrow < 0) return { name: half.trim() };
+  const from = half.slice(0, arrow).trim();
+  const name = half.slice(arrow + ALIAS_ARROW.length).trim();
+  return from ? { name, from } : { name };
 }
 
 // Maps a displayed type label back to a FieldType; an unrecognized label

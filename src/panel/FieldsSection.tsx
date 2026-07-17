@@ -1,9 +1,9 @@
 // The Fields editor: reacts to the board selection and lets the user define
 // fields on the selected block. Resolves the first fieldable element in the
 // selection (a screen's box/title share the group, so we scan past them via
-// each item's meta), shows a grip + name input + type picker + optional
-// toggle per field — rows reorder by dragging the grip (or arrow keys on
-// it) — and persists every change through the fields use-case. Persistence is serialized in
+// each item's meta), shows a grip + name input + type picker + optional toggle +
+// "fed by" toggle per field — rows reorder by dragging the grip (or arrow keys
+// on it) — and persists every change through the fields use-case. Persistence is serialized in
 // features/fields/edit, so we save optimistically without a busy lock.
 //
 // Reading the board can fail, and this must never render a failure as an answer.
@@ -28,6 +28,7 @@ import {
   FIELD_TYPES,
   cleanFieldName,
   displayMode,
+  fieldAlias,
   newField,
   type Field,
   type FieldType,
@@ -456,12 +457,47 @@ export function FieldsSection() {
             >
               ?
             </button>
+            {/* Reveals the "fed by" input, and is itself the only sign an alias
+                is set once the row is collapsed. Labelled with the glyph, not
+                the ">" the board renders: this is clicked, never typed, so it
+                can afford to read better than it types. Turning it on changes
+                nothing on the board — an alias naming nothing renders no arrow —
+                so it stays local rather than spending a board round-trip on a UI
+                toggle. Turning off an alias that named a field is a real edit. */}
+            <button
+              className={field.from !== undefined ? 'field-alias on' : 'field-alias'}
+              type="button"
+              aria-pressed={field.from !== undefined}
+              aria-label="Fed by an upstream field of another name"
+              title="Fed by — an upstream field of another name supplies this one"
+              onClick={() => {
+                const on = field.from !== undefined;
+                const next = fields.map((f) =>
+                  f.id === field.id ? { ...f, from: on ? undefined : '' } : f,
+                );
+                if (on && fieldAlias(field)) save(next);
+                else setFields(next);
+              }}
+            >
+              →
+            </button>
             {field.type === 'custom' && (
               <input
                 className="field-input field-custom"
                 placeholder="type name"
                 value={field.customType ?? ''}
                 onChange={(e) => edit(field.id, { customType: e.target.value })}
+                onBlur={persist}
+              />
+            )}
+            {field.from !== undefined && (
+              <input
+                className="field-input field-from"
+                placeholder="fed by →"
+                value={field.from}
+                // An alias is a field name like any other, and is eaten by the
+                // parsers the same way, so it goes through the same cleaning.
+                onChange={(e) => edit(field.id, { from: cleanFieldName(e.target.value) })}
                 onBlur={persist}
               />
             )}

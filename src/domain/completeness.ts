@@ -4,7 +4,10 @@
 // its fields, and the target is satisfied when that pool covers every field the
 // target declares, matched by name and type (a differing type counts as
 // missing). Only a source's *required* fields supply — a field that may be
-// absent can't guarantee one that must be present. A read model hydrated by
+// absent can't guarantee one that must be present. A target may also declare
+// that one of its fields is fed by an upstream field of a different *name*
+// ("b > a"), which widens what satisfies that one field and nothing else — see
+// fieldAliasKey. A read model hydrated by
 // several events is the motivating case — each event carries its own slice of
 // the whole, and no single one has to carry all of it. When the pool falls
 // short, every arrow into that target is flagged: the gap belongs to the
@@ -12,7 +15,7 @@
 // them all. No platform here: just the model graph and its fields, so it ports
 // unchanged to any canvas.
 
-import { escapeHtml, fieldMatchKey, type Field } from './fields';
+import { escapeHtml, fieldAliasKey, fieldMatchKey, formatField, type Field } from './fields';
 
 // One field-bearing element: its id and the fields it declares.
 export interface FieldedElement {
@@ -20,11 +23,16 @@ export interface FieldedElement {
   fields: Field[];
 }
 
-// One missing field behind a flagged arrow: the key the target requires that
-// nothing feeding it guarantees, and whether the fan-in carries that exact
-// name+type but only as an *optional* field. Both are gaps — the distinction
-// only words the caption, since a field visibly on an upstream block can't be
-// reported as absent.
+// One missing field behind a flagged arrow: the field the target requires that
+// nothing feeding it guarantees, and whether the fan-in carries it but only as
+// an *optional* field. Both are gaps — the distinction only words the caption,
+// since a field visibly on an upstream block can't be reported as absent.
+//
+// `key` is the field as the *target* displays it, so an aliased field reports
+// "b > a : string": the arrow names the upstream field that's actually missing,
+// rather than the local name nothing was ever going to supply. For a field with
+// no alias that's identical to its match key, which is every field until someone
+// declares one.
 export interface FieldGap {
   key: string;
   optionalUpstream: boolean;
@@ -38,15 +46,21 @@ export interface FlowConnector {
   end: string | null;
 }
 
+// The fields that carry information. A blank-named field — an unfilled "+ Add
+// field" row — carries none and is dropped, so it never trips the check.
+function namedFields(fields: Field[]): Field[] {
+  return fields.filter((field) => field.name.trim().length > 0);
+}
+
 // The match keys for a field list: "name : type", the optional marker left off.
 // Callers pre-split required from optional, so the key itself is pure name+type
-// identity on both sides of the comparison. Blank-named fields — an unfilled
-// "+ Add field" row — carry no information and are dropped, so they never trip
-// the check.
+// identity on both sides of the comparison.
+//
+// Aliases are absent here by construction (fieldMatchKey ignores them): this is
+// the *supply* side, and what a block declares it accepts under another name has
+// no bearing on what it hands downstream.
 function fieldKeys(fields: Field[]): Set<string> {
-  return new Set(
-    fields.filter((field) => field.name.trim().length > 0).map((field) => fieldMatchKey(field)),
-  );
+  return new Set(namedFields(fields).map((field) => fieldMatchKey(field)));
 }
 
 // The gap behind every flagged connector: its id mapped to the fields its target
@@ -71,14 +85,16 @@ export function completenessGaps(
   elements: FieldedElement[],
   connectors: FlowConnector[],
 ): Map<string, FieldGap[]> {
-  // Required keys do double duty: what a target demands, and the only thing a
-  // source can be trusted to supply. Optional keys are a source's *soft* supply
-  // — they satisfy nothing, and are tracked purely to word the caption.
+  // A target is judged from its required *fields*, not their keys: an alias is
+  // per-field, so what satisfies each one has to be asked of the field itself.
+  const requiredFieldsById = new Map(
+    elements.map((element) => [element.id, namedFields(element.fields.filter((f) => !f.optional))]),
+  );
+  // Required keys are the only thing a source can be trusted to supply. Optional
+  // keys are a source's *soft* supply — they satisfy nothing, and are tracked
+  // purely to word the caption.
   const requiredById = new Map(
-    elements.map((element) => [
-      element.id,
-      fieldKeys(element.fields.filter((field) => !field.optional)),
-    ]),
+    [...requiredFieldsById].map(([id, fields]) => [id, new Set(fields.map(fieldMatchKey))] as const),
   );
   const optionalById = new Map(
     elements.map((element) => [
@@ -99,8 +115,8 @@ export function completenessGaps(
 
   const gaps = new Map<string, FieldGap[]>();
   for (const [target, incoming] of incomingByTarget) {
-    const required = requiredById.get(target);
-    if (!required || required.size === 0) continue;
+    const required = requiredFieldsById.get(target);
+    if (!required || required.length === 0) continue;
 
     const guaranteed = new Set<string>();
     const optionally = new Set<string>();
@@ -113,9 +129,24 @@ export function completenessGaps(
     // field list rather than an arbitrary permutation. The array is shared by
     // every arrow into this target — they all report the same gap — so callers
     // must treat it as read-only.
-    const missing = [...required]
-      .filter((key) => !guaranteed.has(key))
-      .map((key) => ({ key, optionalUpstream: optionally.has(key) }));
+    const missing: FieldGap[] = [];
+    const judged = new Set<string>();
+    for (const field of required) {
+      const own = fieldMatchKey(field);
+      if (judged.has(own)) continue; // the same field declared twice: judge it once
+      judged.add(own);
+      // Either name satisfies it: its own, or the upstream one it declares it's
+      // fed by. Optionality is then read against whichever name could have
+      // supplied it — a gap the fan-in covers only optionally is still a gap,
+      // but it's the "you have it, but it may be absent" one, and that stays
+      // true when the field it has is the alias.
+      const alias = fieldAliasKey(field);
+      if (guaranteed.has(own) || (alias && guaranteed.has(alias))) continue;
+      missing.push({
+        key: formatField(field),
+        optionalUpstream: optionally.has(own) || (!!alias && optionally.has(alias)),
+      });
+    }
     if (missing.length === 0) continue;
     for (const { id } of incoming) gaps.set(id, missing);
   }

@@ -1,8 +1,8 @@
 /* The Fields editor: a column of field rows (grip + name + type + optional
-   toggle, plus a custom-type input when the type is "custom") and an add
-   button. Rows reorder by dragging the grip; the insertion point renders as
-   a line in the gap between rows (pseudo-elements, so no layout shift while
-   dragging). */
+   toggle + "fed by" toggle, plus a custom-type input when the type is "custom"
+   and a "fed by" input when the alias toggle is on) and an add button. Rows
+   reorder by dragging the grip; the insertion point renders as a line in the
+   gap between rows (pseudo-elements, so no layout shift while dragging). */
 
 /* The read-failed state. Styled unlike the "nothing selected" placeholder on
    purpose — the two used to be the same screen, which is what let a rate-limited
@@ -37,7 +37,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  /* 4px, not 6: six controls (grip, name, type, "?", "→", "×") have to fit the
+     panel's width, and the two px per gap are what keep the "×" from wrapping
+     onto a line of its own. */
+  gap: 4px;
   /* tighter wrap inside a row than between rows, so custom rows read as one unit */
   row-gap: 4px;
 }
@@ -110,20 +113,29 @@
   min-width: 0;
 }
 
+/* Shrinkable, unlike the fixed-width buttons either side of it: the row carries
+   grip + name + type + "?" + "→" + "×", and at the panel's width that only fits
+   if the select gives ground. Left at `0 0 auto` the row overflowed and pushed
+   the "×" onto a line of its own. */
 .field-type {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
-.field-custom {
+.field-custom,
+.field-from {
   flex: 1 1 100%;
   min-width: 0;
   order: 1; /* wrap below the row; keeps × on line 1 with name+type */
 }
 
-/* The optional toggle: a "?" that reads dormant until switched on. */
-.field-optional {
+/* The optional toggle ("?") and the alias toggle ("→"): both read dormant
+   until switched on, and both reveal or mark something the row would otherwise
+   not show. */
+.field-optional,
+.field-alias {
   flex: 0 0 auto;
-  width: 24px;
+  width: 22px;
   height: 24px;
   padding: 0;
   border: 1px solid var(--em-tile-border);
@@ -136,12 +148,14 @@
   cursor: pointer;
 }
 
-.field-optional:hover {
+.field-optional:hover,
+.field-alias:hover {
   color: var(--em-ink);
   background: var(--em-line);
 }
 
-.field-optional.on {
+.field-optional.on,
+.field-alias.on {
   color: #fff;
   border-color: #4262ff;
   background: #4262ff;
@@ -149,7 +163,7 @@
 
 .field-remove {
   flex: 0 0 auto;
-  width: 24px;
+  width: 22px;
   height: 24px;
   padding: 0;
   border: none;

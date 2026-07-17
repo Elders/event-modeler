@@ -257,6 +257,96 @@ rewrite the line every 4s forever.
 The planner prompt teaches the rule too (never introduce a field as optional
 upstream and then require it downstream), or generated models come out red.
 
+### Fields map to differently-named upstream fields (2026-07-17)
+
+Matching on `name : type` means a read model requiring `a : string` is not
+satisfied by an event carrying `b : string`, and the arrow reddens — correctly,
+since nothing in the model said the two were the same datum. But renaming across
+a boundary is ordinary, and the only ways to clear the arrow were to rename one
+of the blocks' fields (a lie about one of them) or to mark the field optional (a
+lie about the model). So a field may now declare the upstream name that feeds it:
+`{ name: 'a', from: 'b' }`, rendered **`full_name > name : string`**.
+
+An alias is **intake only**. It widens what satisfies that one field and changes
+nothing else — `fieldMatchKey` is deliberately blind to `from`, so the read model
+still supplies `a : string` downstream. Aliases must not propagate, or a rename
+declared once would follow the datum across the whole board and no block's own
+field list would tell you what it hands on.
+
+The user's calls on the shape of it:
+
+- **The type must match.** `b > a` means the upstream `b` *of this field's own
+  type*, so `fieldAliasKey` is `from : <own type>` and `b : number` still doesn't
+  satisfy `a : string`. An alias bridges a naming difference; a type difference
+  stays a real gap rather than an implicit conversion.
+- **One alias per field**, not a list of alternatives.
+- **Per target, not per arrow.** "On this read model, `a` may be supplied by `b`"
+  — and any source in the fan-in carrying `b : string` satisfies it, exactly as
+  the pooling rule already works for a field's own name. Per-arrow ("only *this*
+  event's `b`") was declined: it is more precision than the rest of the rule has,
+  since every arrow into a target already reports the same gap.
+
+**It renders on the board rather than living in a registry.** The check reads
+fields off the sticky text and the attached box precisely so it never depends on
+`em-fields` (see above), and an alias has to be readable the same way — a
+registry would have made it invisible on the board, and an arrow that *isn't* red
+because of a mapping nobody can see is worse than the red one. Costs nothing in
+API calls or app-data budget either, and stays editable by typing on the block.
+
+The arrow goes **before the colon**, in the name half: `parseFieldLine` already
+takes everything after the first colon as the type label, so `a : string > b`
+would read back as a custom type named `string > b`. Consequences:
+
+- **`>` joins `:` as a character a field name can't contain**, stripped at the
+  same doors (`cleanFieldName`, the panel's name *and* "fed by" inputs, the
+  generator's trust boundary). Type labels are unaffected — everything past the
+  first colon is already the label, so a custom type may contain either.
+- The leftmost arrow wins, mirroring the colon.
+
+**The source goes first, and the sign is ASCII `>`** (2026-07-17, at the user's
+request). The line reads `full_name > name : string`: the upstream field, then an
+arrow pointing the way the data actually travels, then the field it feeds. The
+first cut had it reversed and glyphed (`name ← full_name`), which was wrong twice
+over:
+
+- **Direction.** Naming the target first and pointing back at the source reads
+  against the model. Every arrow on the board points downstream; a field's alias
+  should too, so the line scans the same way the canvas does.
+- **The glyph.** It was rendered on the reasoning that an ASCII form need only
+  *parse*. That had it backwards: on this canvas the sticky's text **is** the
+  store and is edited directly on the board, so the rendered form is the form
+  people have to type — and `←` is not on a keyboard. `<-` was the first
+  correction, a single character the second: nothing to mistype.
+
+**Nothing parses `←`, `<-` or `<`.** None was ever deployed, so no board carries
+them and there is no legacy path worth the ambiguity of a multi-character
+separator. `splitAlias` therefore mirrors `parseFieldLine`'s colon exactly — one
+`indexOf`, leftmost wins.
+
+The panel's toggle button still *shows* a glyph, now `→`. It is clicked, never
+typed, so it can afford to read better than it types; the input beside it holds
+the "fed by" name, not the separator.
+
+`>` is also the safer bracket. It puts no `<` in the display line at all, and
+`stripHtml`'s tag regex (`/<[^>]*>/g`) only ever starts matching at a `<` — so a
+stray `>` cannot be mistaken for the tail of a tag, even from a host that hands
+back unescaped markup. (With `<` the same round trip survived only because
+`htmlToLines` splits on `</p>` first, leaving no `>` for the regex to close on:
+correct, but by a margin worth not depending on.) The writers escape it to `&gt;`
+regardless.
+
+**The caption names the field as the target displays it** — `full_name > name : string`, not
+`a : string`. The arrow says which upstream field is actually missing; the bare
+local name would send you to add an `a` to the event, which is the one thing the
+mapping says won't help. For a field with no alias it's identical to the match
+key, so every existing caption is unchanged. Optionality still reads through the
+alias: an upstream `b : string?` against a required `full_name > name : string` gives
+`Field "b > a : string" is required`.
+
+The generator does not emit aliases. `normalizeFields` builds the plan's fields
+from `name`/`type`/`optional` only, so a mapping is a manual refinement — the
+planner's job is to name the same datum consistently in the first place.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)
