@@ -473,6 +473,60 @@ deleted.
   match is the signal worth enforcing; a differing type is left to eyeball
   rather than have the check flag it.
 
+### Generated fields (2026-07-17)
+
+**The motivating case:** a command carries `name : string`; the event it
+produces carries `id : UUID` and `name : string`. The `id` is assigned by the
+command handler at runtime — it never arrives on an incoming arrow, by design,
+because nothing upstream of the event *has* an id yet to hand it. Every
+existing knob (`optional`, an alias with no source) was the wrong tool: making
+`id` optional says the event might not have an id, which is false — it always
+does, just not from upstream — and there's no upstream field to alias it to,
+since none exists.
+
+**A field can now be marked `generated`.** It renders `id : UUID!` (`!` right
+after the type, before the optional `?` if both apply — `parseFieldLine`
+strips `?` first, then checks for `!` on what's left, so it doesn't disturb
+existing `type?` parsing at all). The character was free: like `?`, it only
+ever lives on the type-label side of a line, so — like `?` — it needs no
+stripping from names (`cleanFieldName` is unchanged).
+
+**The asymmetry is the whole feature.** A generated field is:
+
+- **Excluded from what its own block's incoming arrows must supply.** The
+  target-side required-fields computation (`requiredFieldsById`) drops
+  generated fields, so an event with a generated `id` never reddens an arrow
+  for `id`'s absence — nothing was ever supposed to carry it in.
+- **Still counted as a guaranteed supply to whatever the block feeds
+  downstream.** A second computation, `suppliedFieldsById`, keeps every
+  non-optional field — generated or not — because once the id is generated
+  it's a real, present value exactly like any sourced field; a read model
+  fed by this event and requiring `id` is satisfied by it. Before this
+  change, one Map (`requiredFieldsById`, feeding a `Set` literally named
+  `requiredById`) served both the "what must I receive" and "what can I hand
+  on" questions, because until now those were always the same set — optional
+  fields excluded from both, everything else included in both. Generated
+  fields are the first case where the two questions have different answers,
+  so the single Map split into two, and the derived match-key Set
+  (`requiredById` → `suppliedById`) was renamed to say which question it
+  actually answers.
+- **This is the opposite asymmetry from `optional`**, which is weak on both
+  ends (doesn't have to be supplied, and doesn't supply anything solid to
+  others). `generated` is weak only on the intake side; on the supply side
+  it's exactly as strong as a plain required field. The two are independent
+  flags — a field can in principle be both (sometimes generated, sometimes
+  absent) — and combine as `!?` in that order, though this is an edge case
+  that motivated nothing here.
+- **The zero-contribution check (above) inherits this for free** — it reads
+  from `suppliedById` like the pooling rule does, so a source whose only
+  overlap with a target is a generated field still counts as contributing.
+
+**Panel:** a `!` toggle button next to the existing `?` one, same shape and
+behavior (`field-generated` mirrors `field-optional` in the CSS).
+**Generator:** does not emit it, same restraint as aliases — `normalizeFields`
+still builds plan fields from `name`/`type`/`optional` only, so nothing needed
+to change there for the trust boundary to keep dropping it.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)

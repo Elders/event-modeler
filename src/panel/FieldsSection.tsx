@@ -1,9 +1,10 @@
 // The Fields editor: reacts to the board selection and lets the user define
 // fields on the selected block. Resolves the first fieldable element in the
 // selection (a screen's box/title share the group, so we scan past them via
-// each item's meta), shows a grip + name input + type picker + optional toggle +
-// "fed by" toggle per field — rows reorder by dragging the grip (or arrow keys
-// on it) — and persists every change through the fields use-case. Persistence is serialized in
+// each item's meta), shows a grip + name input + type picker + generated
+// toggle + optional toggle + "fed by" toggle per field — rows reorder by
+// dragging the grip (or arrow keys on it) — and persists every change through
+// the fields use-case. Persistence is serialized in
 // features/fields/edit, so we save optimistically without a busy lock.
 //
 // Reading the board can fail, and this must never render a failure as an answer.
@@ -443,6 +444,25 @@ export function FieldsSection() {
                 </option>
               ))}
             </select>
+            {/* Synthesized by the block itself at runtime (a handler assigning
+                an id, say) rather than sourced from an incoming block —
+                excluded from what this block's own incoming arrows must
+                supply, but still counted as a guaranteed supply downstream.
+                Shown as a "!" right after the type, before the optional "?". */}
+            <button
+              className={field.generated ? 'field-generated on' : 'field-generated'}
+              type="button"
+              aria-pressed={!!field.generated}
+              aria-label="Generated field"
+              title="Generated — synthesized at runtime, not required from incoming blocks. Shown as a ! after the type."
+              onClick={() =>
+                save(
+                  fields.map((f) => (f.id === field.id ? { ...f, generated: !f.generated } : f)),
+                )
+              }
+            >
+              !
+            </button>
             <button
               className={field.optional ? 'field-optional on' : 'field-optional'}
               type="button"

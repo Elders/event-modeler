@@ -23,6 +23,17 @@ export interface Field {
   // An optional field renders with a "?" after its type and is never required
   // by the completeness check.
   optional?: boolean;
+  // Synthesized by the block itself at runtime — a command handler assigning
+  // an id, say — rather than sourced from an incoming block. Renders with a
+  // "!" right after the type, before the optional "?" if both apply: "id :
+  // UUID!". EXCLUDED from what this block's own incoming arrows must supply
+  // (the completeness check never expects it upstream — nothing produces it,
+  // by design), but still counts as a guaranteed field this block SUPPLIES to
+  // whatever it feeds downstream, exactly like any other required field: once
+  // generated, it's as real and present as anything sourced. See
+  // completenessGaps for the asymmetry. Unlike `optional`, a generated field
+  // is not "maybe absent" — it's guaranteed present, just not by an arrow.
+  generated?: boolean;
   // The upstream field name(s) this one is fed by, when they differ: a read
   // model's "a" supplied by an event's "b" is `{ name: 'a', from: 'b' }`,
   // rendered "b > a : string" — source first, in the direction the data
@@ -59,6 +70,7 @@ export function storableField(field: Field): Omit<Field, 'id'> {
   const base: Omit<Field, 'id'> = { name: field.name, type: field.type };
   if (field.type === 'custom') base.customType = field.customType ?? '';
   if (field.optional) base.optional = true;
+  if (field.generated) base.generated = true;
   const from = fieldAlias(field);
   if (from) base.from = from;
   return base;
@@ -90,6 +102,16 @@ export function newField(): Field {
 // starts matching at a "<", so a stray ">" on a line can never be mistaken for
 // the tail of a tag.
 const ALIAS_ARROW = '>';
+
+// The generated-field marker: one ASCII character, for the same reason as the
+// alias arrow — a sticky's text is the store and is edited directly on the
+// board. Written right after the type, before the optional "?" if both apply
+// ("id : UUID!?"), and parsed in that same outside-in order (parseFieldLine
+// strips "?" first, then checks for this on what's left) — so a pre-existing
+// "type?" label keeps parsing exactly as it always did. Lives only on the
+// type-label side of a line, same as "?", so it needs no stripping from names
+// (contrast ALIAS_ARROW and the colon, which do).
+const GENERATED_MARK = '!';
 
 // The two separators on a display line — "from > name : type" — and so the two
 // things a *name* cannot contain. The parsers split on both, so a field named
@@ -161,16 +183,19 @@ export function fieldAliasNames(field: Field): string[] {
 
 // One field as a single display line: "name : type" — or "from > name : type"
 // (several upstream names joined with ", " when there's more than one) when
-// it's fed by a differently-named upstream field — with a "?" after the type
-// when the field is optional. Joining with a normalized ", " here means
-// however a "fed by" list was typed or edited on the board, it reads back the
-// same way once re-rendered — the same normalize-on-render the rest of this
-// module already relies on.
+// it's fed by a differently-named upstream field — with a "!" right after the
+// type when the field is generated, then a "?" after that when it's also
+// optional: "id : UUID!" or, rarer, "id : UUID!?". Joining aliases with a
+// normalized ", " here means however a "fed by" list was typed or edited on
+// the board, it reads back the same way once re-rendered — the same
+// normalize-on-render the rest of this module already relies on.
 export function formatField(field: Field): string {
   const names = fieldAliasNames(field);
   const name = names.length > 0 ? `${names.join(', ')} ${ALIAS_ARROW} ${field.name}` : field.name;
-  const line = `${name} : ${fieldTypeLabel(field)}`;
-  return field.optional ? `${line}?` : line;
+  let line = `${name} : ${fieldTypeLabel(field)}`;
+  if (field.generated) line += GENERATED_MARK;
+  if (field.optional) line += '?';
+  return line;
 }
 
 // The fields as the board will read them back once these are rendered onto it —
@@ -187,12 +212,13 @@ export function asDisplayed(fields: Field[]): Field[] {
 }
 
 // Whether two field lists carry the same fields in the same order — name, type,
-// custom type name, alias, and optionality all equal. Ids are ignored: they're
-// per-session edit keys, not identity. The alias is compared through
-// fieldAliasNames (not the raw fieldAlias string) so cosmetic differences —
-// "b,c" typed on the board vs. the normalized "b, c" a save last rendered —
-// don't read as a disagreement. Used to decide whether a board-side display
-// and the registry actually disagree before adopting or rewriting anything.
+// custom type name, alias, optionality, and generated-ness all equal. Ids are
+// ignored: they're per-session edit keys, not identity. The alias is compared
+// through fieldAliasNames (not the raw fieldAlias string) so cosmetic
+// differences — "b,c" typed on the board vs. the normalized "b, c" a save last
+// rendered — don't read as a disagreement. Used to decide whether a board-side
+// display and the registry actually disagree before adopting or rewriting
+// anything.
 export function sameFields(a: Field[], b: Field[]): boolean {
   return (
     a.length === b.length &&
@@ -202,7 +228,8 @@ export function sameFields(a: Field[], b: Field[]): boolean {
         field.type === b[index].type &&
         (field.customType ?? '') === (b[index].customType ?? '') &&
         fieldAliasNames(field).join(',') === fieldAliasNames(b[index]).join(',') &&
-        (field.optional ?? false) === (b[index].optional ?? false),
+        (field.optional ?? false) === (b[index].optional ?? false) &&
+        (field.generated ?? false) === (b[index].generated ?? false),
     )
   );
 }
@@ -276,15 +303,23 @@ function parseFieldLine(line: string): Field {
   if (colon < 0) return { id: newFieldId(), ...splitAlias(line), type: 'string' };
   // A trailing "?" is the optional marker, not part of the type label — so a
   // custom type whose own name ends in "?" reads back as that type, optional.
+  // Stripped first, since it's the outermost character when both markers are
+  // present ("type!?") — same order formatField writes them in.
   let label = line.slice(colon + 1).trim();
   const optional = label.endsWith('?');
   if (optional) label = label.slice(0, -1).trim();
+  // A trailing "!" (once any "?" is already off) is the generated marker —
+  // likewise not part of the type label, so a custom type whose own name ends
+  // in "!" reads back as that type, generated.
+  const generated = label.endsWith(GENERATED_MARK);
+  if (generated) label = label.slice(0, -1).trim();
   const field: Field = {
     id: newFieldId(),
     ...splitAlias(line.slice(0, colon)),
     ...typeFromLabel(label),
   };
   if (optional) field.optional = true;
+  if (generated) field.generated = true;
   return field;
 }
 

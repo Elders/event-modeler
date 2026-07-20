@@ -11,16 +11,24 @@
 // may also declare that one of its fields is fed by one or more upstream
 // fields of a different *name* ("b > a", or "b, c > a" for more than one),
 // which widens what satisfies that one field and nothing else — see
-// fieldAliasNames. Any one of
-// several declared names is enough; they're alternatives for the same datum,
-// not all required from the same arrow — a read model whose "a" arrives as "b"
-// from one event and "c" from another is still fully satisfied by the two of
-// them together. A read model hydrated by
+// fieldAliasNames. Any one of several declared names is enough; they're
+// alternatives for the same datum, not all required from the same arrow — a
+// read model whose "a" arrives as "b" from one event and "c" from another is
+// still fully satisfied by the two of them together. A read model hydrated by
 // several events is the motivating case — each event carries its own slice of
 // the whole, and no single one has to carry all of it. When the pool falls
 // short, every arrow into that target is flagged: the gap belongs to the
 // target's fan-in, not to any one arrow, and closing it on any one source clears
 // them all.
+//
+// A field may also be marked *generated*: synthesized by the block itself at
+// runtime (a command handler assigning an id, say) rather than sourced from an
+// incoming block. It's excluded from what its own block's incoming arrows must
+// supply — nothing upstream is ever expected to carry it — but it still
+// counts as a guaranteed supply *from* that block to whatever it feeds
+// downstream, exactly like any other required field: once generated, it's as
+// real and present as anything sourced (see requiredFieldsById vs.
+// suppliedFieldsById).
 //
 // Second, once the target *is* covered by its fan-in, each arrow is judged on
 // its own: a source that supplies none of what the target needs — not even
@@ -126,14 +134,28 @@ export function completenessGaps(
 ): Map<string, FieldGap[]> {
   // A target is judged from its required *fields*, not their keys: an alias is
   // per-field, so what satisfies each one has to be asked of the field itself.
+  // Generated fields are excluded here — synthesized by the block itself at
+  // runtime (a command handler assigning an id, say), never expected from an
+  // incoming arrow — even though the very same field still counts as a
+  // guaranteed supply *from* that block, like any other required one (see
+  // suppliedFieldsById next).
   const requiredFieldsById = new Map(
+    elements.map((element) => [
+      element.id,
+      namedFields(element.fields.filter((f) => !f.optional && !f.generated)),
+    ]),
+  );
+  // What an element supplies downstream, guaranteed: every non-optional field
+  // — generated fields count here even though requiredFieldsById excludes
+  // them, since once generated a field is as real and present to whatever
+  // consumes it as one that arrived from upstream. Only *optional* fields are
+  // a soft, unguaranteed supply — tracked separately, purely to word the
+  // caption.
+  const suppliedFieldsById = new Map(
     elements.map((element) => [element.id, namedFields(element.fields.filter((f) => !f.optional))]),
   );
-  // Required keys are the only thing a source can be trusted to supply. Optional
-  // keys are a source's *soft* supply — they satisfy nothing, and are tracked
-  // purely to word the caption.
-  const requiredById = new Map(
-    [...requiredFieldsById].map(([id, fields]) => [id, new Set(fields.map(fieldMatchKey))] as const),
+  const suppliedById = new Map(
+    [...suppliedFieldsById].map(([id, fields]) => [id, new Set(fields.map(fieldMatchKey))] as const),
   );
   const optionalById = new Map(
     elements.map((element) => [
@@ -160,7 +182,7 @@ export function completenessGaps(
     const guaranteed = new Set<string>();
     const optionally = new Set<string>();
     for (const { start } of incoming) {
-      for (const key of requiredById.get(start) ?? []) guaranteed.add(key);
+      for (const key of suppliedById.get(start) ?? []) guaranteed.add(key);
       for (const key of optionalById.get(start) ?? []) optionally.add(key);
     }
 
@@ -198,7 +220,7 @@ export function completenessGaps(
     // only: an optional match doesn't clear the bar here either, same as it
     // never satisfied the pool above.
     for (const { id, start } of incoming) {
-      const supplied = requiredById.get(start);
+      const supplied = suppliedById.get(start);
       const contributes =
         !!supplied &&
         required.some((field) => {
