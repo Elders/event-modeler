@@ -1,0 +1,188 @@
+/* One field row of the Fields editor — the accordion. Collapsed: a single
+   quiet line showing the board notation ("from > name : type[]!?", alias and
+   marks tinted purple, type muted) with the reorder grip and a chevron. Open:
+   the editor card — a left accent bar and a tinted background so it reads as
+   "the editor", not another bordered box — with name + type on the first
+   line, the segmented mark control below, and the conditional inputs under
+   that, all aligned past the grip. */
+
+.field-closed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.field-closed:hover,
+.field-closed:focus-visible {
+  background: var(--em-line);
+}
+
+.field-notation {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--em-ink);
+}
+
+.field-notation-alias,
+.field-notation-marks {
+  color: var(--em-purple);
+  font-weight: 600;
+}
+
+.field-notation-type {
+  color: var(--em-muted);
+}
+
+.field-notation-unnamed {
+  color: var(--em-hint);
+  font-style: italic;
+}
+
+.field-chevron {
+  flex: 0 0 auto;
+  color: var(--em-hint);
+  font-size: 10px;
+}
+
+/* The open editor card. A single-sided border, so no rounded corners. */
+.field-editor {
+  border-left: 3px solid #4262ff;
+  background: #f7f7fb;
+  padding: 8px 8px 8px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Everything under the first line aligns past the grip, so the grip marks
+   where the row starts and the rest reads as one column. */
+.field-line-indent {
+  margin-left: 20px; /* grip width + gap */
+}
+
+.field-grip {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--em-hint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: grab;
+}
+
+.field-grip:hover,
+.field-grip:focus-visible {
+  color: var(--em-ink);
+  background: var(--em-line);
+}
+
+.field-grip:active {
+  cursor: grabbing;
+}
+
+.field-input {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--em-ink);
+  background: #fff;
+}
+
+.field-input:focus {
+  outline: none;
+  border-color: #4262ff;
+}
+
+/* Shares the first line with the type select, and wins the contest for space:
+   the select keeps its natural width and the name takes the rest. */
+.field-name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-type {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.field-custom,
+.field-from {
+  min-width: 0;
+}
+
+/* The four marks — collection "[]", generated "!", optional "?", alias "→" —
+   as one attached segmented control: a single bordered group, not four
+   floating squares. A mark lights up solid when on. */
+.field-marks {
+  display: inline-flex;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.field-marks button {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--em-hint);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.field-marks button + button {
+  border-left: 1px solid var(--em-tile-border);
+}
+
+.field-marks button:hover {
+  color: var(--em-ink);
+  background: var(--em-line);
+}
+
+.field-marks button.on {
+  color: #fff;
+  background: #4262ff;
+}
+
+.field-remove {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--em-hint);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.field-remove:hover {
+  color: var(--em-error);
+  background: var(--em-line);
+}

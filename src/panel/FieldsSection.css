@@ -1,8 +1,9 @@
-/* The Fields editor: a column of field rows (grip + name + type + optional
-   toggle + "fed by" toggle, plus a custom-type input when the type is "custom"
-   and a "fed by" input when the alias toggle is on) and an add button. Rows
-   reorder by dragging the grip; the insertion point renders as a line in the
-   gap between rows (pseudo-elements, so no layout shift while dragging). */
+/* The Fields editor's own chrome: the failure state, the accordion list, and
+   the drag-reorder visuals. Everything inside a row — the collapsed notation
+   line and the open editor card — lives in FieldRow.css; here a row is just a
+   drag target. Rows reorder by dragging the grip; the insertion point renders
+   as a line in the gap between rows (pseudo-elements, so no layout shift
+   while dragging). */
 
 /* The read-failed state. Styled unlike the "nothing selected" placeholder on
    purpose — the two used to be the same screen, which is what let a rate-limited
@@ -28,26 +29,14 @@
 .fields-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* Tight: collapsed rows are single quiet lines and read as a list, not as
+     spaced-out cards. The open editor card separates itself by its accent. */
+  gap: 4px;
   margin-bottom: 8px;
 }
 
 .field-row {
   position: relative; /* anchors the drop-indicator pseudo-elements */
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  /* 2px: seven controls (grip, name, type, "!", "?", "→", "×") have to fit the
-     panel's width (~320px, minus the panel's own 16px side padding). Went from
-     4px when the row only carried six — adding the generated toggle ("!")
-     overflowed at 4px and pushed "×" onto a line of its own again, the same
-     failure this comment already once described. Verified against the
-     narrowest realistic case (the longest type label, "Date-time" or
-     "Custom…", with every toggle visible) with ~40px to spare — see
-     DECISIONS.md if this needs retuning for an eighth control someday. */
-  gap: 2px;
-  /* tighter wrap inside a row than between rows, so custom rows read as one unit */
-  row-gap: 4px;
 }
 
 .field-row.dragging {
@@ -66,131 +55,9 @@
 }
 
 .field-row.drop-before::before {
-  top: -6px; /* centered in the 10px list gap */
+  top: -3px; /* centered in the 4px list gap */
 }
 
 .field-row.drop-after::after {
-  bottom: -6px;
-}
-
-.field-grip {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--em-hint);
-  font-size: 11px;
-  line-height: 1;
-  cursor: grab;
-}
-
-.field-grip:hover,
-.field-grip:focus-visible {
-  color: var(--em-ink);
-  background: var(--em-line);
-}
-
-.field-grip:active {
-  cursor: grabbing;
-}
-
-.field-input {
-  box-sizing: border-box;
-  padding: 6px 8px;
-  border: 1px solid var(--em-tile-border);
-  border-radius: 6px;
-  font: inherit;
-  font-size: 13px;
-  color: var(--em-ink);
-  background: #fff;
-}
-
-.field-input:focus {
-  outline: none;
-  border-color: #4262ff;
-}
-
-/* flex-basis dropped from 120px to make room for the generated toggle — see
-   the row's gap comment above. min-width:0 is what lets it actually shrink
-   this far instead of stopping at its content size; flex-grow:1 still lets it
-   fill whatever room the type select and toggles leave, so 40px is only ever
-   reached in the tightest case, not the common one. */
-.field-name {
-  flex: 1 1 40px;
-  min-width: 0;
-}
-
-/* Shrinkable, unlike the fixed-width buttons either side of it: the row carries
-   grip + name + type + "!" + "?" + "→" + "×", and at the panel's width that
-   only fits if the select gives ground. Left at `0 0 auto` the row overflowed
-   and pushed the "×" onto a line of its own. */
-.field-type {
-  flex: 0 1 auto;
-  min-width: 0;
-}
-
-.field-custom,
-.field-from {
-  flex: 1 1 100%;
-  min-width: 0;
-  order: 1; /* wrap below the row; keeps × on line 1 with name+type */
-}
-
-/* The generated toggle ("!"), the optional toggle ("?"), and the alias toggle
-   ("→"): all three read dormant until switched on, and all reveal or mark
-   something the row would otherwise not show. 20px, not 22 — shed alongside
-   "×" below to help fit the row now that there are four of these buttons
-   instead of three (see the row's gap comment). */
-.field-generated,
-.field-optional,
-.field-alias {
-  flex: 0 0 auto;
-  width: 20px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid var(--em-tile-border);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--em-hint);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.field-generated:hover,
-.field-optional:hover,
-.field-alias:hover {
-  color: var(--em-ink);
-  background: var(--em-line);
-}
-
-.field-generated.on,
-.field-optional.on,
-.field-alias.on {
-  color: #fff;
-  border-color: #4262ff;
-  background: #4262ff;
-}
-
-.field-remove {
-  flex: 0 0 auto;
-  width: 20px; /* matches the toggle buttons — see their comment */
-  height: 24px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--em-hint);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.field-remove:hover {
-  color: var(--em-error);
-  background: var(--em-line);
+  bottom: -3px;
 }

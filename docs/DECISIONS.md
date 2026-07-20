@@ -527,6 +527,40 @@ behavior (`field-generated` mirrors `field-optional` in the CSS).
 still builds plan fields from `name`/`type`/`optional` only, so nothing needed
 to change there for the trust boundary to keep dropping it.
 
+### Collection fields (2026-07-20)
+
+A field can be marked `collection` — many of the declared type rather than one.
+Renders `tags : string[]`, the `[]` closest to the type since it modifies the
+type itself, before `!` and `?` (`ids : UUID[]!?` in the rare full case);
+parsed outside-in like the other marks, so it composes without new cases.
+**Purely display** — the check matches by name only, so cardinality changes
+nothing there. Generator doesn't emit it, same as `!` and aliases.
+
+### The Fields tab is an accordion (2026-07-20)
+
+The per-field controls had grown one at a time — name, type, then `?`, `→`,
+`!`, `[]` — until eight controls shared one row and the name input bottomed
+out at 40px. Two layouts were built and rejected by the user: everything on
+one line (each new toggle shaved pixels off every other control), then a
+two-line row with the toggles as four floating squares (read as clutter).
+Four redesigns were mocked up and iterated; the user picked the accordion, with
+the type moved up beside the name.
+
+The shape now: every field is one collapsed line showing exactly what the
+board renders — `from > name : type[]!?`, alias and marks tinted — and
+clicking it opens the single editor card (left accent bar): name + type on
+line one, the four marks as one attached segmented control below, custom-type
+and fed-by inputs beneath. New fields open on creation; Escape or a click on
+the card's background closes (closing persists, since Escape skips the
+blur-persist and the board watch would otherwise clobber the unsaved edit).
+Collapsed rows carry no remove button — `×` lives in the open editor only.
+`FieldRow` is its own component (`src/panel/FieldRow.tsx` + css); the section
+keeps the accordion state and the list/drag chrome. Two things this bought
+beyond fit: the list at rest is a preview of the sticky itself, teaching the
+notation people can then type directly on the board; and the next mark costs
+one more 28px cell in the segmented group instead of another round of
+pixel-shaving.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)

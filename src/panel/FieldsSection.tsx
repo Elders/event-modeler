@@ -1,10 +1,10 @@
 // The Fields editor: reacts to the board selection and lets the user define
 // fields on the selected block. Resolves the first fieldable element in the
 // selection (a screen's box/title share the group, so we scan past them via
-// each item's meta), shows a grip + name input + type picker + generated
-// toggle + optional toggle + "fed by" toggle per field — rows reorder by
-// dragging the grip (or arrow keys on it) — and persists every change through
-// the fields use-case. Persistence is serialized in
+// each item's meta), and shows the fields as an accordion of FieldRows: every
+// row is the field's board notation on one line, and the single open row is
+// the full editor. Rows reorder by dragging the grip (or arrow keys on it),
+// and every change persists through the fields use-case — serialized in
 // features/fields/edit, so we save optimistically without a busy lock.
 //
 // Reading the board can fail, and this must never render a failure as an answer.
@@ -25,16 +25,9 @@ import { findFieldsBox } from '../features/fields/board';
 import { setFields as saveFields } from '../features/fields/edit';
 import { resolveFieldTargets, type FieldTarget } from '../features/fields/recognize';
 import { syncFieldsFromBoard } from '../features/fields/sync';
-import {
-  FIELD_TYPES,
-  cleanFieldName,
-  displayMode,
-  fieldAlias,
-  newField,
-  type Field,
-  type FieldType,
-} from '../features/fields/model';
+import { displayMode, newField, type Field } from '../features/fields/model';
 import { services } from '../services';
+import { FieldRow } from './FieldRow';
 import { useDragReorder } from './useDragReorder';
 import { useSelection } from './useSelection';
 
@@ -71,6 +64,9 @@ export function FieldsSection() {
   const [targets, setTargets] = useState<FieldTarget[]>([]);
   const target = targets.length === 1 ? targets[0] : null;
   const [fields, setFields] = useState<Field[]>([]);
+  // The accordion: the one field whose editor is open, or null for none. New
+  // fields open on creation; a different element's fields load all closed.
+  const [openId, setOpenId] = useState<string | null>(null);
   // Why the editor has nothing to show, when it has nothing to show. null means
   // the board answered; a string means it didn't, and the editor says so instead
   // of pretending the selection isn't fieldable.
@@ -104,6 +100,7 @@ export function FieldsSection() {
         const loaded = single ? await syncFieldsFromBoard(single.id, single.type) : [];
         if (cancelled) return;
         setFields(loaded);
+        setOpenId(null); // a different element's fields start all collapsed
         // Marked loaded only now. Setting it before the await meant a cancelled
         // or failed load still claimed the element was loaded, and the early
         // return above then refused to ever read it again.
@@ -303,11 +300,27 @@ export function FieldsSection() {
     const next = [...fields];
     next.splice(index + 1, 0, added);
     pendingFocus.current = added.id;
+    setOpenId(added.id); // a fresh field opens for editing right away
     save(next);
   };
 
   const persist = () => {
     if (target) void writeThrough(target, fields);
+  };
+
+  // Open a row's editor and put the cursor in its name input.
+  const openRow = (id: string) => {
+    setOpenId(id);
+    pendingFocus.current = id;
+  };
+
+  // Close the open editor. Also persists: Escape closes without blurring the
+  // focused input, so its blur-persist never fires — and the board watch
+  // resumes once focus leaves the panel, which would otherwise overwrite the
+  // unsaved edit with what the board still holds.
+  const closeRow = () => {
+    setOpenId(null);
+    persist();
   };
 
   // Reorder: move one field to a new position and write through like any edit.
@@ -393,143 +406,24 @@ export function FieldsSection() {
       <div className="fields-list" {...reorder.listProps}>
         {fields.map((field, index) => (
           <div className={rowClass(index, fields.length)} key={field.id} {...reorder.rowProps(index)}>
-            <button
-              className="field-grip"
-              type="button"
-              aria-label="Move field (drag, or arrow keys)"
-              title="Drag to reorder"
-              {...reorder.handleProps(index)}
-            >
-              ⠿
-            </button>
-            <input
-              className="field-input field-name"
-              placeholder="name"
-              value={field.name}
-              ref={(el) => {
+            <FieldRow
+              field={field}
+              expanded={openId === field.id}
+              onOpen={() => openRow(field.id)}
+              onClose={closeRow}
+              onEdit={(patch) => edit(field.id, patch)}
+              onCommit={(patch) =>
+                save(fields.map((f) => (f.id === field.id ? { ...f, ...patch } : f)))
+              }
+              onPersist={persist}
+              onRemove={() => save(fields.filter((f) => f.id !== field.id))}
+              onInsertBelow={() => insertBelow(field.id)}
+              nameInputRef={(el) => {
                 if (el) nameInputs.current.set(field.id, el);
                 else nameInputs.current.delete(field.id);
               }}
-              // A colon separates the name from the type on the board, so it is
-              // not a name character — dropped as typed or pasted, rather than
-              // accepted here and silently eaten by the parser on the way back.
-              onChange={(e) => edit(field.id, { name: cleanFieldName(e.target.value) })}
-              onKeyDown={(e) => {
-                if (e.key !== 'Enter') return;
-                e.preventDefault();
-                insertBelow(field.id);
-              }}
-              onBlur={persist}
+              grip={reorder.handleProps(index)}
             />
-            <select
-              className="field-input field-type"
-              value={field.type}
-              onChange={(e) =>
-                save(
-                  fields.map((f) =>
-                    f.id === field.id
-                      ? {
-                          ...f,
-                          type: e.target.value as FieldType,
-                          customType: e.target.value === 'custom' ? f.customType : undefined,
-                        }
-                      : f,
-                  ),
-                )
-              }
-            >
-              {FIELD_TYPES.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {/* Synthesized by the block itself at runtime (a handler assigning
-                an id, say) rather than sourced from an incoming block —
-                excluded from what this block's own incoming arrows must
-                supply, but still counted as a guaranteed supply downstream.
-                Shown as a "!" right after the type, before the optional "?". */}
-            <button
-              className={field.generated ? 'field-generated on' : 'field-generated'}
-              type="button"
-              aria-pressed={!!field.generated}
-              aria-label="Generated field"
-              title="Generated — synthesized at runtime, not required from incoming blocks. Shown as a ! after the type."
-              onClick={() =>
-                save(
-                  fields.map((f) => (f.id === field.id ? { ...f, generated: !f.generated } : f)),
-                )
-              }
-            >
-              !
-            </button>
-            <button
-              className={field.optional ? 'field-optional on' : 'field-optional'}
-              type="button"
-              aria-pressed={!!field.optional}
-              aria-label="Optional field"
-              title="Optional — shown as a ? after the type"
-              onClick={() =>
-                save(
-                  fields.map((f) => (f.id === field.id ? { ...f, optional: !f.optional } : f)),
-                )
-              }
-            >
-              ?
-            </button>
-            {/* Reveals the "fed by" input, and is itself the only sign an alias
-                is set once the row is collapsed. Labelled with the glyph, not
-                the ">" the board renders: this is clicked, never typed, so it
-                can afford to read better than it types. Turning it on changes
-                nothing on the board — an alias naming nothing renders no arrow —
-                so it stays local rather than spending a board round-trip on a UI
-                toggle. Turning off an alias that named a field is a real edit. */}
-            <button
-              className={field.from !== undefined ? 'field-alias on' : 'field-alias'}
-              type="button"
-              aria-pressed={field.from !== undefined}
-              aria-label="Fed by an upstream field of another name"
-              title="Fed by — one or more upstream fields of another name supply this one"
-              onClick={() => {
-                const on = field.from !== undefined;
-                const next = fields.map((f) =>
-                  f.id === field.id ? { ...f, from: on ? undefined : '' } : f,
-                );
-                if (on && fieldAlias(field)) save(next);
-                else setFields(next);
-              }}
-            >
-              →
-            </button>
-            {field.type === 'custom' && (
-              <input
-                className="field-input field-custom"
-                placeholder="type name"
-                value={field.customType ?? ''}
-                onChange={(e) => edit(field.id, { customType: e.target.value })}
-                onBlur={persist}
-              />
-            )}
-            {field.from !== undefined && (
-              <input
-                className="field-input field-from"
-                placeholder="fed by → (comma-separate multiple)"
-                title="One or more upstream field names, comma-separated — any one satisfies this field"
-                value={field.from}
-                // An alias is a field name like any other, and is eaten by the
-                // parsers the same way, so it goes through the same cleaning.
-                onChange={(e) => edit(field.id, { from: cleanFieldName(e.target.value) })}
-                onBlur={persist}
-              />
-            )}
-            <button
-              className="field-remove"
-              type="button"
-              aria-label="Remove field"
-              onClick={() => save(fields.filter((f) => f.id !== field.id))}
-            >
-              ×
-            </button>
           </div>
         ))}
       </div>
@@ -537,7 +431,12 @@ export function FieldsSection() {
       <button
         className="button button-small w-full"
         type="button"
-        onClick={() => save([...fields, newField()])}
+        onClick={() => {
+          const added = newField();
+          pendingFocus.current = added.id;
+          setOpenId(added.id); // a fresh field opens for editing right away
+          save([...fields, added]);
+        }}
       >
         + Add field
       </button>
