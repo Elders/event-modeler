@@ -23,14 +23,16 @@ export interface Field {
   // An optional field renders with a "?" after its type and is never required
   // by the completeness check.
   optional?: boolean;
-  // The upstream field name this one is fed by, when it differs: a read model's
-  // "a" supplied by an event's "b" is `{ name: 'a', from: 'b' }`, rendered
-  // "b > a : string" — source first, in the direction the data travels. Purely
-  // an *intake* alias for the completeness check — it widens what satisfies this
-  // field, and changes nothing about what the block supplies downstream (see
-  // fieldMatchKey / fieldAliasKey). The type is not aliased: "b > a" means the
-  // upstream b of this field's own type, so a type difference stays a real gap
-  // rather than an implicit conversion.
+  // The upstream field name(s) this one is fed by, when they differ: a read
+  // model's "a" supplied by an event's "b" is `{ name: 'a', from: 'b' }`,
+  // rendered "b > a : string" — source first, in the direction the data
+  // travels. More than one upstream name is written comma-separated —
+  // "b, c > a : string" — for a read model whose "a" might arrive as "b" from
+  // one event or "c" from another; see fieldAliasNames. Purely an *intake*
+  // alias for the completeness check — it widens what satisfies this field,
+  // and changes nothing about what the block supplies downstream (see
+  // fieldMatchKey). Type plays no part in what satisfies a field (see
+  // fieldMatchKey), aliased or not — only the name is matched.
   from?: string;
 }
 
@@ -118,41 +120,55 @@ export function fieldTypeLabel(field: Field): string {
   return field.type;
 }
 
-// The name+type identity of a field, ignoring optionality: "name : type". The
-// completeness check matches fields on this key, but reads optionality
+// The match identity of a field: just its name, verbatim. The completeness
+// check matches fields on this key — type plays no part in it, deliberately
+// (see completenessGaps): a field is satisfied by an upstream field of the
+// same name whatever type either side declares. Optionality is read
 // separately on both sides — an optional field neither has to be supplied nor
-// supplies anything.
+// supplies anything. Type still renders on the block (formatField) and in the
+// registry (storableField); it just isn't part of what makes two fields "the
+// same field" for this check.
 //
 // Deliberately blind to `from`: an alias is what this field *accepts*, never
 // what it is. A read model whose "a" is fed by an event's "b" still supplies
-// "a : string" to everything downstream of it — aliases don't propagate, or a
-// rename declared once would follow the data across the whole board.
+// "a" to everything downstream of it — aliases don't propagate, or a rename
+// declared once would follow the data across the whole board.
 export function fieldMatchKey(field: Field): string {
-  return `${field.name} : ${fieldTypeLabel(field)}`;
+  return field.name;
 }
 
-// The alias a field declares, or '' when it declares none. Trimmed, so the
-// editor's "toggled on but not yet typed into" state reads as no alias.
+// The alias text a field declares, or '' when it declares none — the raw,
+// un-split "from" text (possibly several names, comma-separated). Trimmed, so
+// the editor's "toggled on but not yet typed into" state reads as no alias.
+// Falsy checks (is there an alias at all) and the toggle button's on/off state
+// use this; anything that needs the individual names wants fieldAliasNames.
 export function fieldAlias(field: Field): string {
   return field.from?.trim() ?? '';
 }
 
-// The *other* key that satisfies this field, when it names an upstream field of
-// a different name: "from : type", or null when there's no alias. The type is
-// the field's own — "b > a" means the upstream b of *this field's* type, so a
-// required "a : string" fed by "b" is satisfied by an upstream "b : string" and
-// still not by "b : number". An alias bridges a naming difference, nothing else.
-export function fieldAliasKey(field: Field): string | null {
-  const from = fieldAlias(field);
-  return from ? `${from} : ${fieldTypeLabel(field)}` : null;
+// The individual upstream names a field declares, comma-separated on the board
+// — "b, c > a" is the field "a", fed by either "b" or "c" — and, since type
+// isn't part of the match key (fieldMatchKey), also exactly the keys that
+// satisfy it: a required "a" fed by "b" is satisfied by an upstream "b" of any
+// type. Each name is trimmed and empties are dropped, so stray commas
+// ("b,, c", "b, ") don't yield a blank name. Empty when the field declares no
+// alias. Any one of the names satisfies the field — they're alternatives for
+// the same datum, not all required at once (see completenessGaps).
+export function fieldAliasNames(field: Field): string[] {
+  const raw = fieldAlias(field);
+  return raw ? raw.split(',').map((name) => name.trim()).filter((name) => name.length > 0) : [];
 }
 
 // One field as a single display line: "name : type" — or "from > name : type"
-// when it's fed by a differently-named upstream field — with a "?" after the
-// type when the field is optional.
+// (several upstream names joined with ", " when there's more than one) when
+// it's fed by a differently-named upstream field — with a "?" after the type
+// when the field is optional. Joining with a normalized ", " here means
+// however a "fed by" list was typed or edited on the board, it reads back the
+// same way once re-rendered — the same normalize-on-render the rest of this
+// module already relies on.
 export function formatField(field: Field): string {
-  const from = fieldAlias(field);
-  const name = from ? `${from} ${ALIAS_ARROW} ${field.name}` : field.name;
+  const names = fieldAliasNames(field);
+  const name = names.length > 0 ? `${names.join(', ')} ${ALIAS_ARROW} ${field.name}` : field.name;
   const line = `${name} : ${fieldTypeLabel(field)}`;
   return field.optional ? `${line}?` : line;
 }
@@ -172,10 +188,11 @@ export function asDisplayed(fields: Field[]): Field[] {
 
 // Whether two field lists carry the same fields in the same order — name, type,
 // custom type name, alias, and optionality all equal. Ids are ignored: they're
-// per-session edit keys, not identity. The alias is compared through fieldAlias
-// so an untyped-into '' matches the absent one it renders as. Used to decide
-// whether a board-side display and the registry actually disagree before
-// adopting or rewriting anything.
+// per-session edit keys, not identity. The alias is compared through
+// fieldAliasNames (not the raw fieldAlias string) so cosmetic differences —
+// "b,c" typed on the board vs. the normalized "b, c" a save last rendered —
+// don't read as a disagreement. Used to decide whether a board-side display
+// and the registry actually disagree before adopting or rewriting anything.
 export function sameFields(a: Field[], b: Field[]): boolean {
   return (
     a.length === b.length &&
@@ -184,7 +201,7 @@ export function sameFields(a: Field[], b: Field[]): boolean {
         field.name === b[index].name &&
         field.type === b[index].type &&
         (field.customType ?? '') === (b[index].customType ?? '') &&
-        fieldAlias(field) === fieldAlias(b[index]) &&
+        fieldAliasNames(field).join(',') === fieldAliasNames(b[index]).join(',') &&
         (field.optional ?? false) === (b[index].optional ?? false),
     )
   );
@@ -275,7 +292,9 @@ function parseFieldLine(line: string): Field {
 // field "a" fed by "b" — the source is on the left, the field's own name on the
 // right. Split at the *first* arrow, mirroring the colon, so the leftmost
 // separator always wins and a second one lands in the *name* — where it is then
-// stripped by the name cleaning, exactly as a stray colon is.
+// stripped by the name cleaning, exactly as a stray colon is. The left side is
+// kept as one raw string ("b, c" stays "b, c") — splitting it into individual
+// upstream names is fieldAliasNames's job, not this parser's.
 //
 // `from` is left off entirely when there's nothing before the arrow, so a
 // stray "> a" parses back as the plain field "a" rather than one carrying an

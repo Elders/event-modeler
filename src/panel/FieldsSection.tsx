@@ -469,7 +469,7 @@ export function FieldsSection() {
               type="button"
               aria-pressed={field.from !== undefined}
               aria-label="Fed by an upstream field of another name"
-              title="Fed by — an upstream field of another name supplies this one"
+              title="Fed by — one or more upstream fields of another name supply this one"
               onClick={() => {
                 const on = field.from !== undefined;
                 const next = fields.map((f) =>
@@ -493,7 +493,8 @@ export function FieldsSection() {
             {field.from !== undefined && (
               <input
                 className="field-input field-from"
-                placeholder="fed by →"
+                placeholder="fed by → (comma-separate multiple)"
+                title="One or more upstream field names, comma-separated — any one satisfies this field"
                 value={field.from}
                 // An alias is a field name like any other, and is eaten by the
                 // parsers the same way, so it goes through the same cleaning.

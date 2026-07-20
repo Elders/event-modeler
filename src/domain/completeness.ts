@@ -4,12 +4,18 @@
 //
 // First, the *target* is judged as a whole: everything pointing into it pools
 // its fields, and the target is satisfied when that pool covers every field the
-// target declares, matched by name and type (a differing type counts as
-// missing). Only a source's *required* fields supply — a field that may be
-// absent can't guarantee one that must be present. A target may also declare
-// that one of its fields is fed by an upstream field of a different *name*
-// ("b > a"), which widens what satisfies that one field and nothing else — see
-// fieldAliasKey. A read model hydrated by
+// target declares, matched by name — type plays no part in it, so a field is
+// satisfied by an upstream field of the same name whatever type either side
+// declares (see fieldMatchKey). Only a source's *required* fields supply — a
+// field that may be absent can't guarantee one that must be present. A target
+// may also declare that one of its fields is fed by one or more upstream
+// fields of a different *name* ("b > a", or "b, c > a" for more than one),
+// which widens what satisfies that one field and nothing else — see
+// fieldAliasNames. Any one of
+// several declared names is enough; they're alternatives for the same datum,
+// not all required from the same arrow — a read model whose "a" arrives as "b"
+// from one event and "c" from another is still fully satisfied by the two of
+// them together. A read model hydrated by
 // several events is the motivating case — each event carries its own slice of
 // the whole, and no single one has to carry all of it. When the pool falls
 // short, every arrow into that target is flagged: the gap belongs to the
@@ -27,7 +33,7 @@
 // catches an arrow that carries none of it. No platform here: just the model
 // graph and its fields, so it ports unchanged to any canvas.
 
-import { escapeHtml, fieldAliasKey, fieldMatchKey, formatField, type Field } from './fields';
+import { escapeHtml, fieldAliasNames, fieldMatchKey, formatField, type Field } from './fields';
 
 // One field-bearing element: its id and the fields it declares.
 export interface FieldedElement {
@@ -44,8 +50,9 @@ export interface FieldedElement {
 //   the field as the target displays it, so an aliased field reports
 //   "b > a : string": the arrow names the upstream field that's actually
 //   missing, rather than the local name nothing was ever going to supply. For
-//   a field with no alias that's identical to its match key, which is every
-//   field until someone declares one.
+//   a field with no alias it's just the field's own "name : type" display —
+//   type still shows here even though it plays no part in matching (see
+//   fieldMatchKey).
 // - `'noContribution'`: the target *is* covered by its fan-in, but this
 //   arrow's own source supplies none of what the target needs — the link
 //   itself is the thing flagged, not the target.
@@ -72,9 +79,10 @@ function namedFields(fields: Field[]): Field[] {
   return fields.filter((field) => field.name.trim().length > 0);
 }
 
-// The match keys for a field list: "name : type", the optional marker left off.
-// Callers pre-split required from optional, so the key itself is pure name+type
-// identity on both sides of the comparison.
+// The match keys for a field list: just the name (see fieldMatchKey) — type
+// and the optional marker both left off. Callers pre-split required from
+// optional, so the key itself is pure name identity on both sides of the
+// comparison.
 //
 // Aliases are absent here by construction (fieldMatchKey ignores them): this is
 // the *supply* side, and what a block declares it accepts under another name has
@@ -92,11 +100,12 @@ function fieldKeys(fields: Field[]): Set<string> {
 //
 // Each target is judged once, over its whole fan-in: the sources pointing into
 // it pool their required fields, and the pool must cover every field the target
-// requires, matched by name and type. Optionality cuts both ways — an optional
-// target field (shown as "name : type?") need not be supplied by anyone, and an
-// optional *source* field supplies nobody. A required supply anywhere in the
-// fan-in still wins: one source carrying the key as required satisfies the
-// target however many others carry it optionally.
+// requires, matched by name only — type is not compared (see fieldMatchKey).
+// Optionality cuts both ways — an optional target field (shown as
+// "name : type?") need not be supplied by anyone, and an optional *source*
+// field supplies nobody. A required supply anywhere in the fan-in still wins:
+// one source carrying the key as required satisfies the target however many
+// others carry it optionally.
 //
 // When the pool falls short, every arrow into that target is returned, including
 // arrows whose own source supplies nothing: the shortfall is the target's, and
@@ -165,17 +174,17 @@ export function completenessGaps(
       const own = fieldMatchKey(field);
       if (judged.has(own)) continue; // the same field declared twice: judge it once
       judged.add(own);
-      // Either name satisfies it: its own, or the upstream one it declares it's
-      // fed by. Optionality is then read against whichever name could have
-      // supplied it — a gap the fan-in covers only optionally is still a gap,
-      // but it's the "you have it, but it may be absent" one, and that stays
-      // true when the field it has is the alias.
-      const alias = fieldAliasKey(field);
-      if (guaranteed.has(own) || (alias && guaranteed.has(alias))) continue;
+      // Any of its names satisfies it: its own, or any one of the upstream ones
+      // it declares it's fed by. Optionality is then read against whichever
+      // name could have supplied it — a gap the fan-in covers only optionally
+      // is still a gap, but it's the "you have it, but it may be absent" one,
+      // and that stays true when the field it has is one of the aliases.
+      const aliases = fieldAliasNames(field);
+      if (guaranteed.has(own) || aliases.some((key) => guaranteed.has(key))) continue;
       missing.push({
         kind: 'missing',
         key: formatField(field),
-        optionalUpstream: optionally.has(own) || (!!alias && optionally.has(alias)),
+        optionalUpstream: optionally.has(own) || aliases.some((key) => optionally.has(key)),
       });
     }
     if (missing.length > 0) {
@@ -194,8 +203,8 @@ export function completenessGaps(
         !!supplied &&
         required.some((field) => {
           const own = fieldMatchKey(field);
-          const alias = fieldAliasKey(field);
-          return supplied.has(own) || (!!alias && supplied.has(alias));
+          const aliases = fieldAliasNames(field);
+          return supplied.has(own) || aliases.some((key) => supplied.has(key));
         });
       if (!contributes) gaps.set(id, NO_CONTRIBUTION);
     }

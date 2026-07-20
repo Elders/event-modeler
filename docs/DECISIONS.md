@@ -276,11 +276,11 @@ field list would tell you what it hands on.
 
 The user's calls on the shape of it:
 
-- **The type must match.** `b > a` means the upstream `b` *of this field's own
-  type*, so `fieldAliasKey` is `from : <own type>` and `b : number` still doesn't
-  satisfy `a : string`. An alias bridges a naming difference; a type difference
-  stays a real gap rather than an implicit conversion.
-- **One alias per field**, not a list of alternatives.
+- **The type must match** — revised 2026-07-17, the opposite way: type was
+  dropped from matching everywhere in the completeness check, alias or not; see
+  *Field type excluded from completeness matching* below.
+- **One alias per field, not a list of alternatives** — revised 2026-07-17 to
+  the opposite call; see *Aliases support multiple upstream names* below.
 - **Per target, not per arrow.** "On this read model, `a` may be supplied by `b`"
   — and any source in the fan-in carrying `b : string` satisfies it, exactly as
   the pooling rule already works for a field's own name. Per-arrow ("only *this*
@@ -339,8 +339,8 @@ regardless.
 **The caption names the field as the target displays it** — `full_name > name : string`, not
 `a : string`. The arrow says which upstream field is actually missing; the bare
 local name would send you to add an `a` to the event, which is the one thing the
-mapping says won't help. For a field with no alias it's identical to the match
-key, so every existing caption is unchanged. Optionality still reads through the
+mapping says won't help. For a field with no alias it's just the field's plain
+`name : type` display, so every existing caption is unchanged. Optionality still reads through the
 alias: an upstream `b : string?` against a required `full_name > name : string` gives
 `Field "b > a : string" is required`.
 
@@ -386,6 +386,92 @@ a second, individual check.
   everything it needs, the arrow just isn't part of how. `FieldGap` gained a
   `kind` discriminant (`'missing'` | `'noContribution'`) so `gapLines` can
   tell the two apart.
+
+### Aliases support multiple upstream names (2026-07-17)
+
+**The bug, reported immediately after the zero-contribution rule above
+shipped:** a read model's field aliased to one upstream name (`full_name >
+name : string`) is routinely hydrated by more than one event, and different
+events don't always use the same upstream name for the same datum — one event
+carries `full_name`, another carries `display_name`. Each event is a
+legitimate, distinct contributor (exactly the multi-event hydration pattern
+this whole rule set exists to support), but only one of their field names could
+ever match the field's single declared alias. The other event's arrow supplied
+none of what the *matcher* recognized as relevant — a false positive for the
+zero-contribution check above, reddening a link that was doing real work.
+
+**The fix reopens "one alias per field, not a list of alternatives"** (settled
+above, 2026-07-15) in the direction the name always half-suggested: `from` may
+now name **several** upstream fields, comma-separated — `full_name,
+display_name > name : string` — and *any one* of them satisfies the field, the
+same way any one source in a fan-in satisfies a target's pooled requirement.
+`fieldAliasKey` (singular) became `fieldAliasKeys` (plural, `string[]`), and
+every caller that checked one key now checks `.some()` across the list —
+`completenessGaps`' pooled-gap loop, its optional-caption check, and the new
+zero-contribution loop all take the same shape, just widened from "the one
+alias" to "any declared alias."
+
+- **Still one *field*, several names for the same datum.** This isn't a list
+  of independent aliases with separate meanings — every name in the list feeds
+  the same target field, at the same type. A source satisfies the field by
+  matching *any* name in the list; it doesn't need to match all of them, and
+  matching two doesn't count double.
+- **No new separator character needed.** The board syntax already put the
+  whole "from" side of the arrow in one flexible slot (`splitAlias` captures it
+  as raw text, unparsed); the list only had to be recognized inside it. Comma
+  was free — it isn't used anywhere else in a field's display line — so
+  `fieldAliasNames` splits on it and trims each name, and `cleanFieldName`
+  deliberately does **not** strip commas (unlike `:` and `>`), or the panel's
+  "fed by" input couldn't type the separator it needs.
+- **Normalizes on render, like everything else in this format.** However
+  loosely a list was typed — `"full_name,display_name"`, extra spaces, a
+  trailing comma — `formatField` always joins with `", "`, so a board edit
+  converges to the canonical form the next time it's rendered. `sameFields`
+  compares the parsed name lists rather than the raw string for the same
+  reason: a cosmetic difference in spacing must not read as a real disagreement
+  and trigger a needless rewrite.
+- **No panel UI changes were needed.** The "fed by" input was already a single
+  free-text field; typing a comma-separated list into it just works. Only the
+  placeholder and tooltips were reworded to say so.
+
+### Field type excluded from completeness matching (2026-07-17)
+
+**At the user's explicit request:** type no longer plays any part in whether a
+field is satisfied. Matching is now name-only, everywhere the completeness
+check compares two fields — the plain-name match in the pooling rule, the
+alias match (reopening "the type must match" from *Fields map to
+differently-named upstream fields* above, in the opposite direction this
+time), and the zero-contribution check. A required `email : string` downstream
+is now satisfied by an upstream field named `email` of *any* declared type —
+`number`, a custom type, anything.
+
+This reverses the original framing of the whole feature: the file that opened
+this section started from "matching on `name : type`" as the given, and every
+subsequent rule (aliases, zero-contribution) was built keyed on `"name :
+type"` strings. `fieldMatchKey` is now just `field.name`; the old
+`fieldAliasKey` (singular, `"from : type"`) had already become `fieldAliasKeys`
+(plural) for the multi-value work above, and — since a match key is now
+nothing more than a name — collapsed into `fieldAliasNames` outright, which
+already existed and returned exactly that. No new function was needed, one was
+deleted.
+
+- **Type still renders, it just doesn't gate.** `formatField` is untouched —
+  every block, box, and caption still shows `name : type`. A field's type
+  remains real, declared information; it simply stopped being part of what
+  makes two fields "the same field" for the purposes of this check. The
+  generator's system prompt is worded the same way: still teaches "keep the
+  same name and type" as good modeling practice, but no longer claims the
+  checker enforces the type half.
+- **`sameFields` (board-vs-registry drift detection) is unaffected.** That
+  function answers a different question — "are these two field records
+  literally identical" — for deciding whether to adopt a board edit into the
+  `em-fields` registry, and correctly keeps comparing type there. Only
+  completeness *matching* (satisfies-the-target) dropped it.
+- **Consequence, accepted:** a required `id : string` downstream is now
+  satisfied by an upstream `id : number` — a genuine type mismatch that used
+  to redden the arrow now passes silently. The user's call was that the name
+  match is the signal worth enforcing; a differing type is left to eyeball
+  rather than have the check flag it.
 
 ## Platform constraints (learned the hard way)
 
