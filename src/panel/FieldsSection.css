@@ -37,10 +37,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  /* 4px, not 6: six controls (grip, name, type, "?", "→", "×") have to fit the
-     panel's width, and the two px per gap are what keep the "×" from wrapping
-     onto a line of its own. */
-  gap: 4px;
+  /* 2px: seven controls (grip, name, type, "!", "?", "→", "×") have to fit the
+     panel's width (~320px, minus the panel's own 16px side padding). Went from
+     4px when the row only carried six — adding the generated toggle ("!")
+     overflowed at 4px and pushed "×" onto a line of its own again, the same
+     failure this comment already once described. Verified against the
+     narrowest realistic case (the longest type label, "Date-time" or
+     "Custom…", with every toggle visible) with ~40px to spare — see
+     DECISIONS.md if this needs retuning for an eighth control someday. */
+  gap: 2px;
   /* tighter wrap inside a row than between rows, so custom rows read as one unit */
   row-gap: 4px;
 }
@@ -108,15 +113,20 @@
   border-color: #4262ff;
 }
 
+/* flex-basis dropped from 120px to make room for the generated toggle — see
+   the row's gap comment above. min-width:0 is what lets it actually shrink
+   this far instead of stopping at its content size; flex-grow:1 still lets it
+   fill whatever room the type select and toggles leave, so 40px is only ever
+   reached in the tightest case, not the common one. */
 .field-name {
-  flex: 1 1 120px;
+  flex: 1 1 40px;
   min-width: 0;
 }
 
 /* Shrinkable, unlike the fixed-width buttons either side of it: the row carries
-   grip + name + type + "?" + "→" + "×", and at the panel's width that only fits
-   if the select gives ground. Left at `0 0 auto` the row overflowed and pushed
-   the "×" onto a line of its own. */
+   grip + name + type + "!" + "?" + "→" + "×", and at the panel's width that
+   only fits if the select gives ground. Left at `0 0 auto` the row overflowed
+   and pushed the "×" onto a line of its own. */
 .field-type {
   flex: 0 1 auto;
   min-width: 0;
@@ -129,13 +139,16 @@
   order: 1; /* wrap below the row; keeps × on line 1 with name+type */
 }
 
-/* The optional toggle ("?") and the alias toggle ("→"): both read dormant
-   until switched on, and both reveal or mark something the row would otherwise
-   not show. */
+/* The generated toggle ("!"), the optional toggle ("?"), and the alias toggle
+   ("→"): all three read dormant until switched on, and all reveal or mark
+   something the row would otherwise not show. 20px, not 22 — shed alongside
+   "×" below to help fit the row now that there are four of these buttons
+   instead of three (see the row's gap comment). */
+.field-generated,
 .field-optional,
 .field-alias {
   flex: 0 0 auto;
-  width: 22px;
+  width: 20px;
   height: 24px;
   padding: 0;
   border: 1px solid var(--em-tile-border);
@@ -148,12 +161,14 @@
   cursor: pointer;
 }
 
+.field-generated:hover,
 .field-optional:hover,
 .field-alias:hover {
   color: var(--em-ink);
   background: var(--em-line);
 }
 
+.field-generated.on,
 .field-optional.on,
 .field-alias.on {
   color: #fff;
@@ -163,7 +178,7 @@
 
 .field-remove {
   flex: 0 0 auto;
-  width: 22px;
+  width: 20px; /* matches the toggle buttons — see their comment */
   height: 24px;
   padding: 0;
   border: none;
