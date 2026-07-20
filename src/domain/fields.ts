@@ -45,6 +45,15 @@ export interface Field {
   // fieldMatchKey). Type plays no part in what satisfies a field (see
   // fieldMatchKey), aliased or not — only the name is matched.
   from?: string;
+  // A collection of the declared type, rather than one instance of it — a
+  // command's "items : string[]" carries many strings, not one. Renders as
+  // "[]" right after the type label, before the generated "!" and optional
+  // "?" marks if either apply: "tags : string[]", or "tags : string[]?" when
+  // also optional. Purely a display detail — the completeness check matches
+  // fields by name alone (fieldMatchKey), so a required "items : string[]" is
+  // satisfied by an upstream "items" of any type or cardinality, same as any
+  // other field.
+  collection?: boolean;
 }
 
 // The type options offered in the editor, in display order.
@@ -71,6 +80,7 @@ export function storableField(field: Field): Omit<Field, 'id'> {
   if (field.type === 'custom') base.customType = field.customType ?? '';
   if (field.optional) base.optional = true;
   if (field.generated) base.generated = true;
+  if (field.collection) base.collection = true;
   const from = fieldAlias(field);
   if (from) base.from = from;
   return base;
@@ -112,6 +122,16 @@ const ALIAS_ARROW = '>';
 // type-label side of a line, same as "?", so it needs no stripping from names
 // (contrast ALIAS_ARROW and the colon, which do).
 const GENERATED_MARK = '!';
+
+// The collection marker: a field holding many of its type rather than one,
+// written right after the type label — closer to the type than either "!" or
+// "?", since it modifies the type itself ("string[]") rather than the field
+// as a whole. formatField appends it first of the three, so the full order is
+// "type[]!?"; parseFieldLine strips outside-in, so this is stripped last, off
+// whatever "?" and "!" stripping already left behind. Same reasoning as
+// GENERATED_MARK for why this lives on the type-label side and needs no name
+// stripping.
+const COLLECTION_MARK = '[]';
 
 // The two separators on a display line — "from > name : type" — and so the two
 // things a *name* cannot contain. The parsers split on both, so a field named
@@ -183,9 +203,10 @@ export function fieldAliasNames(field: Field): string[] {
 
 // One field as a single display line: "name : type" — or "from > name : type"
 // (several upstream names joined with ", " when there's more than one) when
-// it's fed by a differently-named upstream field — with a "!" right after the
-// type when the field is generated, then a "?" after that when it's also
-// optional: "id : UUID!" or, rarer, "id : UUID!?". Joining aliases with a
+// it's fed by a differently-named upstream field — with "[]" right after the
+// type when the field is a collection, then a "!" when it's also generated,
+// then a "?" after that when it's also optional: "tags : string[]", or
+// "id : UUID!", or, rarer, "ids : UUID[]!?". Joining aliases with a
 // normalized ", " here means however a "fed by" list was typed or edited on
 // the board, it reads back the same way once re-rendered — the same
 // normalize-on-render the rest of this module already relies on.
@@ -193,6 +214,7 @@ export function formatField(field: Field): string {
   const names = fieldAliasNames(field);
   const name = names.length > 0 ? `${names.join(', ')} ${ALIAS_ARROW} ${field.name}` : field.name;
   let line = `${name} : ${fieldTypeLabel(field)}`;
+  if (field.collection) line += COLLECTION_MARK;
   if (field.generated) line += GENERATED_MARK;
   if (field.optional) line += '?';
   return line;
@@ -212,13 +234,13 @@ export function asDisplayed(fields: Field[]): Field[] {
 }
 
 // Whether two field lists carry the same fields in the same order — name, type,
-// custom type name, alias, optionality, and generated-ness all equal. Ids are
-// ignored: they're per-session edit keys, not identity. The alias is compared
-// through fieldAliasNames (not the raw fieldAlias string) so cosmetic
-// differences — "b,c" typed on the board vs. the normalized "b, c" a save last
-// rendered — don't read as a disagreement. Used to decide whether a board-side
-// display and the registry actually disagree before adopting or rewriting
-// anything.
+// custom type name, alias, optionality, generated-ness, and collection-ness all
+// equal. Ids are ignored: they're per-session edit keys, not identity. The
+// alias is compared through fieldAliasNames (not the raw fieldAlias string) so
+// cosmetic differences — "b,c" typed on the board vs. the normalized "b, c" a
+// save last rendered — don't read as a disagreement. Used to decide whether a
+// board-side display and the registry actually disagree before adopting or
+// rewriting anything.
 export function sameFields(a: Field[], b: Field[]): boolean {
   return (
     a.length === b.length &&
@@ -229,7 +251,8 @@ export function sameFields(a: Field[], b: Field[]): boolean {
         (field.customType ?? '') === (b[index].customType ?? '') &&
         fieldAliasNames(field).join(',') === fieldAliasNames(b[index]).join(',') &&
         (field.optional ?? false) === (b[index].optional ?? false) &&
-        (field.generated ?? false) === (b[index].generated ?? false),
+        (field.generated ?? false) === (b[index].generated ?? false) &&
+        (field.collection ?? false) === (b[index].collection ?? false),
     )
   );
 }
@@ -313,6 +336,11 @@ function parseFieldLine(line: string): Field {
   // in "!" reads back as that type, generated.
   const generated = label.endsWith(GENERATED_MARK);
   if (generated) label = label.slice(0, -1).trim();
+  // A trailing "[]" (once "?" and "!" are already off) is the collection
+  // marker — likewise not part of the type label, so a custom type whose own
+  // name ends in "[]" reads back as that type, collection.
+  const collection = label.endsWith(COLLECTION_MARK);
+  if (collection) label = label.slice(0, -COLLECTION_MARK.length).trim();
   const field: Field = {
     id: newFieldId(),
     ...splitAlias(line.slice(0, colon)),
@@ -320,6 +348,7 @@ function parseFieldLine(line: string): Field {
   };
   if (optional) field.optional = true;
   if (generated) field.generated = true;
+  if (collection) field.collection = true;
   return field;
 }
 
