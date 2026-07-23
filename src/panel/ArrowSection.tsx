@@ -29,11 +29,16 @@ import {
 import { failureReason, reportToLog } from '../features/diagnostics';
 import { isBoardRateLimited } from '../features/hostStatus';
 import { Dot, type DotKind } from './Dot';
+import { useConfirmStep } from './useConfirmStep';
 
 // The same slow self-retry as the fields editor: the failure this retries is
 // usually an exhausted credit budget, and a tight loop would spend the very
 // thing that ran out.
 const RETRY_MS = 15_000;
+
+// How long an armed Replace stays primed before disarming itself, counted down
+// on the button so the window is visible rather than a silent deadline.
+const CONFIRM_SECONDS = 4;
 
 function title(endpoint: ArrowEndpoint): string {
   return endpoint.name || endpoint.label;
@@ -67,6 +72,9 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   const [attempt, setAttempt] = useState(0);
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  // Replace overwrites the target's whole field list, so it takes two clicks
+  // (per direction); Copy (a safe merge) and Navigate stay one-click.
+  const confirm = useConfirmStep<TransferDirection>(CONFIRM_SECONDS);
   // Which arrow the shown info belongs to. A re-describe of the SAME arrow (a
   // retry, the refresh after a transfer) keeps the current card on screen
   // instead of flashing back to "Reading…"; a different arrow clears it.
@@ -79,6 +87,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
       setInfo(null);
       setStatus(null);
       setLoaded(false);
+      confirm.disarm(); // a pending Replace never carries to a different arrow
     }
     void describeArrow(connectorId)
       .then((described) => {
@@ -113,6 +122,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   const transfer = (direction: TransferDirection, mode: TransferMode) => {
     setWorking(true);
     setStatus(null);
+    confirm.disarm(); // committing (or a Copy) disarms any pending Replace
     void transferFields(connectorId, direction, mode)
       .then((outcome) => {
         setStatus(outcome.message);
@@ -126,9 +136,17 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
       .finally(() => setWorking(false));
   };
 
+  // Arm Replace on the first click, commit on the second. Any other action
+  // (Copy, Navigate, switching arrows, the timeout) disarms it first.
+  const requestReplace = (direction: TransferDirection) => {
+    setStatus(null);
+    if (confirm.request(direction)) transfer(direction, 'replace');
+  };
+
   const navigate = (endpoint: ArrowEndpoint) => {
     setWorking(true);
     setStatus(null);
+    confirm.disarm();
     void navigateToEndpoint(endpoint)
       .then((found) => {
         if (!found) setStatus(`${title(endpoint)} is no longer on the board.`);
@@ -199,6 +217,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   // pair. The card always renders — a blocked direction shows why on hover.
   const moveCard = (direction: TransferDirection, source: ArrowEndpoint, target: ArrowEndpoint) => {
     const why = blocked(direction);
+    const armed = confirm.isArmed(direction);
     return (
       <div className="arrow-move">
         <div className="arrow-move-ends">
@@ -219,13 +238,18 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
             Copy
           </button>
           <button
-            className="arrow-action"
+            className={`arrow-action${armed ? ' arrow-action-armed' : ''}`}
             type="button"
             disabled={working || why !== null}
-            title={why ?? `Replace ${title(target)}'s fields with ${title(source)}'s`}
-            onClick={() => transfer(direction, 'replace')}
+            title={
+              why ??
+              (armed
+                ? `Click again to overwrite ${title(target)}'s fields with ${title(source)}'s`
+                : `Replace ${title(target)}'s fields with ${title(source)}'s`)
+            }
+            onClick={() => requestReplace(direction)}
           >
-            Replace
+            {armed ? `Confirm (${confirm.countdown})` : 'Replace'}
           </button>
         </div>
       </div>

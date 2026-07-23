@@ -74,6 +74,54 @@
   font-weight: 500;
 }
 
+/* Clear-all, directly under Add field: the same row shape, but a quiet,
+   secondary read (muted text, no blue action glyph) because it's destructive
+   and rarely the thing you want. It arms into the error colour on first click
+   — matching the arrow toolset's Replace — and commits on the second. */
+.field-clear {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.field-clear:hover {
+  border-color: #b6b6c8;
+}
+
+.field-clear-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--em-muted);
+}
+
+.field-clear-x {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--em-muted);
+}
+
+/* Armed for its committing second click. */
+.field-clear-armed,
+.field-clear-armed:hover {
+  border-color: var(--em-error);
+  background: #fdf2f2;
+}
+
+.field-clear-armed .field-clear-label,
+.field-clear-armed .field-clear-x {
+  color: var(--em-error);
+}
+
 .field-row.dragging {
   opacity: 0.4;
 }

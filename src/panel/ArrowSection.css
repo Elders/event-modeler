@@ -95,6 +95,7 @@
   font-weight: 500;
   color: var(--em-ink);
   cursor: pointer;
+  white-space: nowrap; /* "Confirm (4)" must not wrap taller than Copy */
 }
 
 .arrow-action:hover:enabled {
@@ -104,6 +105,16 @@
 .arrow-action:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Armed for its second, committing click: Replace overwrites the whole list,
+   so the primed state reads in the error colour like the rest of the app's
+   destructive signals. */
+.arrow-action-armed,
+.arrow-action-armed:hover:enabled {
+  border-color: var(--em-error);
+  background: #fdf2f2;
+  color: var(--em-error);
 }
 
 .arrow-nav {

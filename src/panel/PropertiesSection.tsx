@@ -41,6 +41,7 @@ import { services } from '../services';
 import { ArrowSection } from './ArrowSection';
 import { FieldRow } from './FieldRow';
 import { NameEditor } from './NameEditor';
+import { useConfirmStep } from './useConfirmStep';
 import { useDragReorder } from './useDragReorder';
 import { useSelection } from './useSelection';
 
@@ -49,6 +50,10 @@ import { useSelection } from './useSelection';
 // would be spending the very thing that ran out. The Retry button is there for
 // anyone who doesn't want to wait.
 const RETRY_MS = 15_000;
+
+// How long the Clear button stays armed before disarming itself, counted down
+// on the button. Matches the arrow toolset's Replace guard.
+const CLEAR_CONFIRM_SECONDS = 4;
 
 function blockLabel(type: BlockType): string {
   return BLOCKS.find((block) => block.type === type)?.label ?? type;
@@ -101,6 +106,10 @@ export function PropertiesSection() {
   // The accordion: the one field whose editor is open, or null for none. New
   // fields open on creation; a different element's fields load all closed.
   const [openId, setOpenId] = useState<string | null>(null);
+  // Clear-all-fields is destructive, so it's a two-step confirm (like the arrow
+  // toolset's Replace): the first click arms it with a visible countdown, a
+  // second within the window commits.
+  const clearConfirm = useConfirmStep<'clear'>(CLEAR_CONFIRM_SECONDS);
   // Why the editor has nothing to show, when it has nothing to show. null means
   // the board answered; a string means it didn't, and the editor says so instead
   // of pretending the selection isn't editable.
@@ -312,6 +321,7 @@ export function PropertiesSection() {
   const shownId = useRef<string | null>(null);
   useEffect(() => {
     shownId.current = target?.id ?? null;
+    clearConfirm.disarm(); // a pending Clear never carries to a different block
   }, [target?.id]);
 
   // Rename the subject on the board. Optimistic — the input would otherwise
@@ -360,7 +370,15 @@ export function PropertiesSection() {
   // truth while editing, so update locally first and write through.
   const save = (next: Field[]) => {
     setFields(next);
+    // Any committed edit cancels a pending Clear — its own commit included, and
+    // adding/removing a field while it's armed shouldn't then wipe the new list.
+    clearConfirm.disarm();
     if (target) void writeThrough(target, next);
+  };
+
+  // Clear every field: arm on the first click, wipe on the second.
+  const requestClear = () => {
+    if (clearConfirm.request('clear')) save([]);
   };
 
   // Local-only update while typing a text input; committed on blur.
@@ -570,6 +588,28 @@ export function PropertiesSection() {
           +
         </span>
       </button>
+
+      {fields.length > 0 && (
+        <button
+          className={`field-clear${clearConfirm.isArmed('clear') ? ' field-clear-armed' : ''}`}
+          type="button"
+          title={
+            clearConfirm.isArmed('clear')
+              ? 'Click again to remove every field from this block'
+              : 'Remove every field from this block'
+          }
+          onClick={requestClear}
+        >
+          <span className="field-clear-label">
+            {clearConfirm.isArmed('clear')
+              ? `Confirm clear (${clearConfirm.countdown})`
+              : 'Clear fields'}
+          </span>
+          <span className="field-clear-x" aria-hidden="true">
+            ×
+          </span>
+        </button>
+      )}
     </section>
   );
 }
