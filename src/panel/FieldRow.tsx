@@ -1,9 +1,11 @@
 // One field in the Fields editor — an accordion row. Collapsed, it shows the
 // field exactly as the board renders it (the "from > name : type[]!?"
-// notation, alias and marks tinted) on a single quiet line; open, it becomes
-// the editor card: name + type on the first line, the four modifier marks as
-// one segmented control below, and the custom-type / fed-by inputs beneath
-// when they apply. The section owns which row is open (one at a time); this
+// notation, alias and marks tinted) on a single quiet line — plus a second,
+// dimmer "= example" line when the field carries one, kept off the notation
+// line so names and types stay scannable; open, it becomes the editor card:
+// name + type on the first line, the five modifier marks as one segmented
+// control below, and the custom-type / fed-by / example inputs beneath when
+// they apply. The section owns which row is open (one at a time); this
 // component just reports clicks. A collapsed row opens on click; the open
 // card closes on Escape or a click on its own background — the controls
 // inside swallow their clicks, so only the card's padding closes it.
@@ -15,6 +17,7 @@ import {
   cleanFieldName,
   fieldAlias,
   fieldAliasNames,
+  fieldExample,
   fieldTypeLabel,
   type Field,
   type FieldType,
@@ -48,20 +51,27 @@ interface FieldRowProps {
 
 // The collapsed line, rendered from the Field rather than by re-parsing
 // formatField's string, so the parts can be tinted individually. Same order
-// formatField writes: aliases > name : type, then the marks "[]!?".
+// formatField writes: aliases > name : type, then the marks "[]!?". The
+// example is the one part that leaves the line: it goes on a second, dimmer
+// line of its own — free text can be arbitrarily long, and inline it would
+// truncate the notation itself out of the row.
 function Notation({ field }: { field: Field }) {
   const aliases = fieldAliasNames(field);
   const marks = `${field.collection ? '[]' : ''}${field.generated ? '!' : ''}${field.optional ? '?' : ''}`;
+  const example = fieldExample(field);
   return (
     <span className="field-notation">
-      {aliases.length > 0 && <span className="field-notation-alias">{aliases.join(', ')} &gt; </span>}
-      {field.name ? (
-        field.name
-      ) : (
-        <span className="field-notation-unnamed">unnamed</span>
-      )}
-      <span className="field-notation-type"> : {fieldTypeLabel(field)}</span>
-      {marks.length > 0 && <span className="field-notation-marks">{marks}</span>}
+      <span className="field-notation-line">
+        {aliases.length > 0 && <span className="field-notation-alias">{aliases.join(', ')} &gt; </span>}
+        {field.name ? (
+          field.name
+        ) : (
+          <span className="field-notation-unnamed">unnamed</span>
+        )}
+        <span className="field-notation-type"> : {fieldTypeLabel(field)}</span>
+        {marks.length > 0 && <span className="field-notation-marks">{marks}</span>}
+      </span>
+      {example && <span className="field-notation-example">= {example}</span>}
     </span>
   );
 }
@@ -164,12 +174,12 @@ export function FieldRow(props: FieldRowProps) {
           ×
         </button>
       </div>
-      {/* The four marks as one segmented control, in the order they render on
-          the board: "type[]!?", then the alias arrow. "[]" = a collection of
-          the type; "!" = generated — synthesized by the block at runtime,
-          excluded from what its incoming arrows must supply but still a
-          guaranteed supply downstream; "?" = optional; "→" reveals the
-          "fed by" input below. */}
+      {/* The five marks as one segmented control, in the order they render on
+          the board: "type[]!?", then the alias arrow, then the example "=".
+          "[]" = a collection of the type; "!" = generated — synthesized by the
+          block at runtime, excluded from what its incoming arrows must supply
+          but still a guaranteed supply downstream; "?" = optional; "→"
+          reveals the "fed by" input below; "=" reveals the example input. */}
       <div className="field-line field-line-indent">
         <div className="field-marks">
           <button
@@ -222,6 +232,24 @@ export function FieldRow(props: FieldRowProps) {
           >
             →
           </button>
+          {/* Same on/off contract as the alias toggle: turning it on just
+              reveals the input (an empty example never renders, so no board
+              round-trip); turning off an example that says something is a
+              real edit. */}
+          <button
+            className={field.example !== undefined ? 'on' : ''}
+            type="button"
+            aria-pressed={field.example !== undefined}
+            aria-label="Example value"
+            title="Example — a sample value, shown as = value at the end of the line. Documentation only; the completeness check ignores it."
+            onClick={() => {
+              const on = field.example !== undefined;
+              if (on && fieldExample(field)) props.onCommit({ example: undefined });
+              else props.onEdit({ example: on ? undefined : '' });
+            }}
+          >
+            =
+          </button>
         </div>
       </div>
       {field.type === 'custom' && (
@@ -242,6 +270,18 @@ export function FieldRow(props: FieldRowProps) {
           // An alias is a field name like any other, and is eaten by the
           // parsers the same way, so it goes through the same cleaning.
           onChange={(e) => props.onEdit({ from: cleanFieldName(e.target.value) })}
+          onBlur={props.onPersist}
+        />
+      )}
+      {field.example !== undefined && (
+        <input
+          className="field-input field-example field-line-indent"
+          placeholder="example value"
+          title="A sample value for this field — shown on the block after an ="
+          value={field.example}
+          // Uncleaned: the example is the tail of the line, past every
+          // separator the parsers split on, so any text round-trips.
+          onChange={(e) => props.onEdit({ example: e.target.value })}
           onBlur={props.onPersist}
         />
       )}

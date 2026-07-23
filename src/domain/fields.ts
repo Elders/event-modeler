@@ -54,6 +54,14 @@ export interface Field {
   // satisfied by an upstream "items" of any type or cardinality, same as any
   // other field.
   collection?: boolean;
+  // A sample value, free text: "Ada Lovelace" for a name, "2026-07-01 09:30"
+  // for a datetime. Renders as " = example" at the very end of the line, after
+  // every mark: "from > name : type[]!? = example". Pure documentation — no
+  // part in the completeness check (which matches by name alone, see
+  // fieldMatchKey) and never in an arrow caption (a caption reports a field
+  // that is MISSING; a sample of a value nobody carries would read as data).
+  // The generator doesn't emit it, same as the marks and aliases.
+  example?: string;
 }
 
 // The type options offered in the editor, in display order.
@@ -83,6 +91,10 @@ export function storableField(field: Field): Omit<Field, 'id'> {
   if (field.collection) base.collection = true;
   const from = fieldAlias(field);
   if (from) base.from = from;
+  // Same rule as `from`: kept only when it says something — the editor's "="
+  // toggle turns it on as an empty string, which is a UI state, not an example.
+  const example = fieldExample(field);
+  if (example) base.example = example;
   return base;
 }
 
@@ -132,6 +144,19 @@ const GENERATED_MARK = '!';
 // GENERATED_MARK for why this lives on the type-label side and needs no name
 // stripping.
 const COLLECTION_MARK = '[]';
+
+// The example separator: everything after the first "=" on the type-label side
+// of a line is the field's sample value, taken verbatim — free text, so commas,
+// colons, spaces, even further "="s all land in the example. Written last on
+// the line ("from > name : type[]!? = example") and stripped first when parsing
+// (it's the outermost part), so the marks and the type label never see it and
+// an example ending in "?" or "[]" stays intact. One ASCII character, same
+// reason as the alias arrow: the sticky's text is the store and is typed by
+// hand. Lives only past the first colon, so names may contain "=" freely (no
+// cleanFieldName change); the one casualty is a CUSTOM type whose own name
+// contains " = " — its tail reads back as an example — the same class of
+// tradeoff already accepted for "?", "!" and "[]".
+const EXAMPLE_MARK = '=';
 
 // The two separators on a display line — "from > name : type" — and so the two
 // things a *name* cannot contain. The parsers split on both, so a field named
@@ -201,15 +226,24 @@ export function fieldAliasNames(field: Field): string[] {
   return raw ? raw.split(',').map((name) => name.trim()).filter((name) => name.length > 0) : [];
 }
 
+// The example a field declares, or '' when it declares none. Trimmed for the
+// same reason as fieldAlias: the editor's "toggled on but not yet typed into"
+// state reads as no example, and never renders.
+export function fieldExample(field: Field): string {
+  return field.example?.trim() ?? '';
+}
+
 // One field as a single display line: "name : type" — or "from > name : type"
 // (several upstream names joined with ", " when there's more than one) when
 // it's fed by a differently-named upstream field — with "[]" right after the
 // type when the field is a collection, then a "!" when it's also generated,
 // then a "?" after that when it's also optional: "tags : string[]", or
-// "id : UUID!", or, rarer, "ids : UUID[]!?". Joining aliases with a
-// normalized ", " here means however a "fed by" list was typed or edited on
-// the board, it reads back the same way once re-rendered — the same
-// normalize-on-render the rest of this module already relies on.
+// "id : UUID!", or, rarer, "ids : UUID[]!?". An example, when the field
+// carries one, is the last thing on the line: "name : string = Ada Lovelace".
+// Joining aliases with a normalized ", " here means however a "fed by" list
+// was typed or edited on the board, it reads back the same way once
+// re-rendered — the same normalize-on-render the rest of this module already
+// relies on; the example gets the same treatment (trimmed, spaces around "=").
 export function formatField(field: Field): string {
   const names = fieldAliasNames(field);
   const name = names.length > 0 ? `${names.join(', ')} ${ALIAS_ARROW} ${field.name}` : field.name;
@@ -217,6 +251,8 @@ export function formatField(field: Field): string {
   if (field.collection) line += COLLECTION_MARK;
   if (field.generated) line += GENERATED_MARK;
   if (field.optional) line += '?';
+  const example = fieldExample(field);
+  if (example) line += ` ${EXAMPLE_MARK} ${example}`;
   return line;
 }
 
@@ -234,13 +270,14 @@ export function asDisplayed(fields: Field[]): Field[] {
 }
 
 // Whether two field lists carry the same fields in the same order — name, type,
-// custom type name, alias, optionality, generated-ness, and collection-ness all
-// equal. Ids are ignored: they're per-session edit keys, not identity. The
-// alias is compared through fieldAliasNames (not the raw fieldAlias string) so
-// cosmetic differences — "b,c" typed on the board vs. the normalized "b, c" a
-// save last rendered — don't read as a disagreement. Used to decide whether a
-// board-side display and the registry actually disagree before adopting or
-// rewriting anything.
+// custom type name, alias, optionality, generated-ness, collection-ness, and
+// example all equal. Ids are ignored: they're per-session edit keys, not
+// identity. The alias is compared through fieldAliasNames (not the raw
+// fieldAlias string) so cosmetic differences — "b,c" typed on the board vs. the
+// normalized "b, c" a save last rendered — don't read as a disagreement; the
+// example goes through fieldExample for the same reason (trim only — its text
+// is otherwise verbatim). Used to decide whether a board-side display and the
+// registry actually disagree before adopting or rewriting anything.
 export function sameFields(a: Field[], b: Field[]): boolean {
   return (
     a.length === b.length &&
@@ -252,7 +289,8 @@ export function sameFields(a: Field[], b: Field[]): boolean {
         fieldAliasNames(field).join(',') === fieldAliasNames(b[index]).join(',') &&
         (field.optional ?? false) === (b[index].optional ?? false) &&
         (field.generated ?? false) === (b[index].generated ?? false) &&
-        (field.collection ?? false) === (b[index].collection ?? false),
+        (field.collection ?? false) === (b[index].collection ?? false) &&
+        fieldExample(field) === fieldExample(b[index]),
     )
   );
 }
@@ -324,11 +362,22 @@ function parseFieldLine(line: string): Field {
   // and still leaves any colon inside a custom type label on the label side.
   const colon = line.indexOf(':');
   if (colon < 0) return { id: newFieldId(), ...splitAlias(line), type: 'string' };
+  // The example is the outermost part of the line ("type[]!? = example"), so
+  // it comes off before any mark — everything past the first "=" is the
+  // example, verbatim, which is what lets an example itself end in "?" or
+  // "[]". A bare trailing "=" (toggled on, never typed into) yields an empty
+  // example and is dropped, mirroring how it never renders.
+  let label = line.slice(colon + 1).trim();
+  let example = '';
+  const eq = label.indexOf(EXAMPLE_MARK);
+  if (eq >= 0) {
+    example = label.slice(eq + 1).trim();
+    label = label.slice(0, eq).trim();
+  }
   // A trailing "?" is the optional marker, not part of the type label — so a
   // custom type whose own name ends in "?" reads back as that type, optional.
-  // Stripped first, since it's the outermost character when both markers are
-  // present ("type!?") — same order formatField writes them in.
-  let label = line.slice(colon + 1).trim();
+  // Stripped first of the marks, since it's the outermost character when both
+  // markers are present ("type!?") — same order formatField writes them in.
   const optional = label.endsWith('?');
   if (optional) label = label.slice(0, -1).trim();
   // A trailing "!" (once any "?" is already off) is the generated marker —
@@ -349,6 +398,7 @@ function parseFieldLine(line: string): Field {
   if (optional) field.optional = true;
   if (generated) field.generated = true;
   if (collection) field.collection = true;
+  if (example) field.example = example;
   return field;
 }
 

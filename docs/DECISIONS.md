@@ -561,6 +561,40 @@ notation people can then type directly on the board; and the next mark costs
 one more 28px cell in the segmented group instead of another round of
 pixel-shaving.
 
+### Field examples (2026-07-23)
+
+A field can carry an `example` — a sample value the user wants visible on the
+element itself: `name : string = Ada Lovelace`. Written last on the line
+(`from > name : type[]!? = example`) and parsed first: everything past the
+first `=` on the type-label side is the example, verbatim, so free text —
+commas, colons, further `=`s, even a trailing `?` or `[]` — round-trips
+untouched and the mark parsing never sees it. `=` never appears before the
+colon, so names may contain it and `cleanFieldName` is unchanged; a custom
+type whose own name contains `=` loses its tail to the example, the same
+accepted tradeoff as the marks.
+
+Pure documentation, three ways: the completeness check ignores it (matching
+stays name-only), arrow captions omit it (a caption reports a *missing* field
+— a sample of a value nobody carries would read as data), and the generator
+doesn't emit it (same as the marks and aliases; it could later, since prose
+often contains concrete values).
+
+Four panel designs were mocked up and iterated: a fifth `=` mark in the
+segmented control revealing an input (the alias toggle's exact pattern), an
+always-visible input (most discoverable, but every open row grows a permanently
+empty input), the example inline on the name row (rejected on width — ~8
+visible characters), and a quiet "+ example" link (nicest feel, but a new
+interaction pattern where the toggle one already exists). The user picked the
+`=` mark. For the collapsed row, inline-dimmed, a second line, and a
+right-aligned pill were offered; the user picked the second line — the one
+part of the notation that leaves the "exactly as the board renders it" line,
+because free text is arbitrarily long and inline it would truncate the
+notation itself out of the row. Each line ellipsizes on its own.
+
+The registry follows the same rule as aliases: `storableField` keeps the
+example only when it says something (the toggle's empty-string on-state is UI,
+not data), so unused examples cost nothing against the app-data budget.
+
 ## Platform constraints (learned the hard way)
 
 ### Board app-data budget is tight (~tens of KB)

@@ -205,7 +205,9 @@ export function completenessGaps(
       if (guaranteed.has(own) || aliases.some((key) => guaranteed.has(key))) continue;
       missing.push({
         kind: 'missing',
-        key: formatField(field),
+        // Without its example: the caption reports a field that is missing,
+        // and a sample of the value nobody carries would read as data.
+        key: formatField({ ...field, example: undefined }),
         optionalUpstream: optionally.has(own) || aliases.some((key) => optionally.has(key)),
       });
     }

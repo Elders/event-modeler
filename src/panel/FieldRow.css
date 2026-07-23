@@ -1,7 +1,8 @@
-/* One field row of the Fields editor — the accordion. Collapsed: a single
-   quiet line showing the board notation ("from > name : type[]!?", alias and
-   marks tinted purple, type muted) with the reorder grip and a chevron. Open:
-   the editor card — a left accent bar and a tinted background so it reads as
+/* One field row of the Fields editor — the accordion. Collapsed: a quiet line
+   showing the board notation ("from > name : type[]!?", alias and marks
+   tinted purple, type muted) with the reorder grip and a chevron, plus a
+   second, dimmer "= example" line when the field carries one. Open: the
+   editor card — a left accent bar and a tinted background so it reads as
    "the editor", not another bordered box — with name + type on the first
    line, the segmented mark control below, and the conditional inputs under
    that, all aligned past the grip. */
@@ -20,14 +21,26 @@
   background: var(--em-line);
 }
 
+/* Truncation lives on the two lines, not the container, so each ellipsizes on
+   its own — a long example never eats the notation, and vice versa. */
 .field-notation {
   flex: 1 1 auto;
   min-width: 0;
+  font-size: 13px;
+  color: var(--em-ink);
+}
+
+.field-notation-line,
+.field-notation-example {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  color: var(--em-ink);
+}
+
+.field-notation-example {
+  color: var(--em-hint);
+  font-size: 12px;
 }
 
 .field-notation-alias,
@@ -126,13 +139,14 @@
 }
 
 .field-custom,
-.field-from {
+.field-from,
+.field-example {
   min-width: 0;
 }
 
-/* The four marks — collection "[]", generated "!", optional "?", alias "→" —
-   as one attached segmented control: a single bordered group, not four
-   floating squares. A mark lights up solid when on. */
+/* The five marks — collection "[]", generated "!", optional "?", alias "→",
+   example "=" — as one attached segmented control: a single bordered group,
+   not five floating squares. A mark lights up solid when on. */
 .field-marks {
   display: inline-flex;
   border: 1px solid var(--em-tile-border);
