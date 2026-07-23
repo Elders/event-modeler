@@ -40,14 +40,26 @@ corners or padding), **no white/light-gray background**, explanatory text ≤ 2
 lines / ≤ 20 % of the image, no logos in the shots, filenames like
 `screenshot-1.png`. Videos: YouTube only.
 
-Capture the panel **in context on a board with a colored or dark backdrop** — a
-screenshot of the light panel on its own would blend into the marketplace and
-violate the background rule. Suggested shots:
+Shoot on a board with a **tinted background** (a soft blue works well) — a
+white/light-gray board blends into the marketplace and violates the background
+rule.
 
-1. Palette + a small model with swimlanes and slices.
-2. Given/When/Then specification stacked under a slice.
-3. Fields on a block + a reddened completeness arrow with its caption.
-4. Generate tab: pasted text → drafted model.
+### Final set
+
+The chosen screenshots, in listing order. Export the PNGs into
+[`branding/screenshots/`](../branding/screenshots/) with these exact names:
+
+| File | Size | Shot | Shows |
+| --- | --- | --- | --- |
+| `screenshot-1.png` | 1159×706 | Product UI + model (hero) | The Event Modeler panel beside a full model (Register screen → command → event → read model), including the reddened completeness arrow — the app's interface and its differentiator in one frame. |
+| `screenshot-2.png` | 1258×704 | Model → spec overview | One slice's model beside its Given/When/Then specification — the whole "model → spec" story in one landscape frame. |
+| `screenshot-3.png` | 1029×692 | Completeness check (detail) | A zoomed reddened arrow captioned `timestamp : datetime` — the live check flagging that the command doesn't supply a field the event requires. |
+
+All three: tinted (soft-blue) background, full-bleed, within 1258×706, saved in
+[`branding/screenshots/`](../branding/screenshots/). The top Miro logo/Upgrade
+bar is cropped from all; #1 intentionally keeps the app panel + left toolbar to
+show the product UI. Optional future #4 (not yet shot): the Generate tab drafting
+a model from pasted text.
 
 ## Scopes
 
