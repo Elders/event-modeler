@@ -216,8 +216,8 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
         />
         <p className="footnote">
           Stored only in this browser, never on the board. Get a key at{' '}
-          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
-            console.anthropic.com
+          <a href="https://platform.claude.com" target="_blank" rel="noreferrer">
+            platform.claude.com
           </a>
           .
         </p>
