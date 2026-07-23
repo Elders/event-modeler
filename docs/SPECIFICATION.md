@@ -431,6 +431,36 @@ shows it in the panel — the visible half of the "never fabricate" rule (§9).
 
 ---
 
+### 8.7 Arrow tools
+
+- When the selection is **exactly one link**, the Fields tab shows the arrow
+  toolset instead of the field editor: four field-transfer buttons and one
+  navigation button per attached end.
+- **Copy** (with or against the link's direction) merges the source end's
+  fields into the target end's: fields are matched **by name only** (the
+  completeness check's identity), the target's version of a shared name is
+  kept untouched, and only missing names are appended.
+- **Replace** (either direction) overwrites the target end's whole field list
+  with the source end's.
+- A transferred field keeps its name, type, collection mark, optional mark and
+  example; it **drops the fed-by alias and the generated mark** — both
+  describe the block they were written on, not the receiver.
+- Transfers are refused (buttons disabled) when either end is unattached or
+  cannot carry fields, and when the source end has no fields — replacing with
+  an empty list must not act as a hidden "clear fields".
+- **Navigate to \<block label\>** pans the viewport to the attached element —
+  centered at the current zoom, growing only if the element doesn't fit;
+  navigation never zooms in. Both ends the same label → the button also shows
+  the block's name.
+- Every action acts on the board's **current** state: the arrow and its
+  endpoints are re-read fresh at click time, never served from a stale cache;
+  writes go through the standard fields edit path (conflict check, box
+  rebuild, registry follow, completeness nudge).
+- The toolset stores nothing: no registry entries, no app-data, no per-arrow
+  state.
+
+---
+
 ## 9. Cross-cutting requirements
 
 - **Always on.** The tool's reactive behaviors — copy propagation, on-canvas

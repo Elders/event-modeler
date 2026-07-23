@@ -1092,6 +1092,63 @@ answer without noticing. The per-minute bar is the honest instrument here: a
 single pass lands inside one second, so the minute window shows one pass's cost
 outright, at one-decimal precision below 10k.
 
+## The arrow toolset (2026-07-23)
+
+Selecting a single arrow turns the Fields tab into a small toolset for the
+connection itself: **Copy →**, **Copy ←**, **Replace →**, **Replace ←**, and a
+**Navigate to \<block\>** button per attached end. Decisions that shaped it:
+
+**Copy merges, Replace overwrites.** Copy appends only the fields the receiver
+doesn't already carry — matched by name alone, the same `fieldMatchKey` the
+completeness check uses — and never edits a field the receiver already has.
+Replace swaps the receiver's whole list for the source's. Both directions are
+offered because hydration flows both ways in practice (a command drafted from
+the event it should produce, and vice versa). A transfer from an empty source
+is refused rather than treated as a clear: replacing with nothing is a
+disguised delete, and the fields editor is the honest place to clear a block.
+
+**What survives the trip.** A copied field keeps its name, type, `[]`, `?` and
+`= example`, and loses its alias and its `!`. The alias names the upstream
+feeds *of the block it was written on* — wrong on any other block. The `!`
+says "this block synthesizes the value"; the receiver doesn't, it receives it,
+and to consumers a generated field already looks like an ordinary required
+field, so dropping the mark preserves exactly the downstream meaning.
+
+**Every action reads fresh, by design.** Endpoints get dragged, retyped,
+re-attached and deleted with no SDK event to say so, and the adapter's handle
+cache is a fetch-time snapshot — a stale answer here doesn't fail, it silently
+copies old fields or pans to where a block used to be. So the arrow feature
+never trusts a cached handle: description and every click re-fetch through
+`board.getById`, which is documented **Level 1 (50 credits)** — the same lookup
+through `board.get({id})` (the only fetch path the adapter had) costs Level 3,
+500. That tenfold gap is what makes "always fresh" affordable: a typical
+sticky-to-sticky arrow describes for ~150 credits, and only an endpoint that
+turns out to be part of a screen/automation group adds the one board-wide
+`groups()` read, shared across both ends. `getById` also gave the cache its
+missing eviction path: it names a dead id outright ("Can not retrieve item
+with id …"), so the adapter now drops the corpse `ensureLive` would otherwise
+keep vouching for.
+
+**Navigation pans, never zooms in.** `panTo` keeps the current viewport size
+and recenters, growing only when the block doesn't fit — the navigate-to
+counterpart of the expand-never-zoom rule for creation. Frame children carry
+parent-relative coordinates, so bounds are resolved to absolute through the
+parent frame (memoized — both ends usually share a slice) before panning.
+Wiring the buttons also surfaced that `MiroViewport` bypassed `withRateLimit`
+entirely; viewport calls are now paced and counted like every other SDK call
+(inferred Level 1 — the docs print no level for them, and silence is an
+omission, not an exemption).
+
+**No new state anywhere.** No registry, no per-arrow records, nothing in
+app-data: everything derives from the live selection each time, and the writes
+go through the existing fields edit path — box rebuilding, registry following,
+the mid-write conflict check and the completeness nudge all apply unchanged.
+The one base-tracking subtlety: the transfer notes its own fresh read as the
+conflict base (`noteBoardFields`) before writing, so the check compares now
+against now instead of against whatever the panel editor last saw of that
+block — without it, copying onto a block edited on the board since it was last
+open in the editor would refuse as a phantom conflict.
+
 ## Workflow conventions
 
 - **master is the production branch.** Every push to master builds and

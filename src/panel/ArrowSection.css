@@ -1,0 +1,45 @@
+/* The arrow toolset: the 2x2 transfer grid, the per-end navigate buttons, and
+   the outcome line. The failure state mirrors the fields editor's on purpose —
+   the two tabs' failure screens should read as the same thing. */
+
+.arrow-ends {
+  overflow-wrap: anywhere;
+}
+
+.arrow-transfer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.arrow-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.arrow-status {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--em-muted);
+  overflow-wrap: anywhere;
+}
+
+.arrow-failure {
+  margin: 2px 0 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--em-ink);
+}
+
+.arrow-failure-reason {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--em-error);
+  border-radius: 3px;
+  background: #fdf2f2;
+  font-size: 11px;
+  color: var(--em-muted);
+  overflow-wrap: anywhere;
+}

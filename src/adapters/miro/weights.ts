@@ -63,6 +63,15 @@ export type MiroOp =
   // docs is an omission, not an exemption. Not worth re-deriving from the docs;
   // they will still be silent.
   | 'sync'
+  // Level 1, documented on the Board page — the cheap way to reach a known id.
+  // `board.get({ id })` prices the same lookup at Level 3, so anything fetching
+  // one or two known elements should come through getById instead (see
+  // MiroCanvas.fetchLiveById); the batched `get` only wins past ~10 ids.
+  | 'getById'
+  // Level 1 — INFERRED. The viewport page prints no level for get/set, and
+  // silence is an omission, not an exemption (see `sync` for the measurement
+  // that settled that principle).
+  | 'viewport'
   // getMetadata is documented Level 1. setMetadata prints no level and is
   // INFERRED to match it.
   | 'meta'
@@ -86,6 +95,8 @@ export const WEIGHT: Record<MiroOp, number> = {
   createImage: LEVEL_3,
   syncImage: LEVEL_3,
   create: LEVEL_1,
+  getById: LEVEL_1,
+  viewport: LEVEL_1,
   sync: LEVEL_1,
   meta: LEVEL_1,
   appData: LEVEL_1,

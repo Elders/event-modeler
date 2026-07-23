@@ -127,6 +127,34 @@ export class MiroCanvas implements Canvas {
     this.cacheAll(await withRateLimit('get', () => miro.board.get({ id: missing })));
   }
 
+  // Whether an error is board.getById's answer for an id that no longer exists
+  // — the documented wording is "Can not retrieve item with id …". That is the
+  // one named condition under which a fresh fetch may report absence as a
+  // value; anything else (rate limit, bridge down) propagates, because a host
+  // that couldn't look is not a host that answered "gone".
+  private static isNotFound(error: unknown): boolean {
+    const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+    return message.includes('can not retrieve item') || message.includes('not found');
+  }
+
+  // Fetches one item FRESH from the board — never served from the cache, whose
+  // handles are fetch-time snapshots that go stale as the board is edited — and
+  // re-caches the live handle. null means the board answered that the id no
+  // longer exists, in which case any stale cache entry is evicted with it:
+  // ensureLive treats "in the cache" as "exists", and a corpse it keeps
+  // vouching for only surfaces later as a failed sync.
+  private async fetchLiveById(id: string): Promise<LiveItem | null> {
+    try {
+      return this.cache(
+        (await withRateLimit('getById', () => miro.board.getById(id))) as LiveItem,
+      );
+    } catch (error) {
+      if (!MiroCanvas.isNotFound(error)) throw error;
+      this.items.delete(id);
+      return null;
+    }
+  }
+
   private snap(item: LiveItem): CanvasElement {
     const a = item as unknown as ReadView;
     return {
@@ -291,25 +319,43 @@ export class MiroCanvas implements Canvas {
     return children.map((child) => this.snap(child));
   }
 
+  private snapConnector(item: LiveItem): CanvasConnector {
+    const c = item as unknown as {
+      id: string;
+      start?: { item?: string };
+      end?: { item?: string };
+      style?: { strokeColor?: string };
+      captions?: { content?: string }[];
+    };
+    const caption = c.captions?.[0]?.content;
+    return {
+      id: c.id,
+      start: c.start?.item ?? null,
+      end: c.end?.item ?? null,
+      color: typeof c.style?.strokeColor === 'string' ? c.style.strokeColor : null,
+      caption: typeof caption === 'string' ? caption : null,
+    };
+  }
+
   async connectors(): Promise<CanvasConnector[]> {
     const items = this.cacheAll(await withRateLimit('get', () => miro.board.get({ type: 'connector' })));
-    return items.map((item) => {
-      const c = item as unknown as {
-        id: string;
-        start?: { item?: string };
-        end?: { item?: string };
-        style?: { strokeColor?: string };
-        captions?: { content?: string }[];
-      };
-      const caption = c.captions?.[0]?.content;
-      return {
-        id: c.id,
-        start: c.start?.item ?? null,
-        end: c.end?.item ?? null,
-        color: typeof c.style?.strokeColor === 'string' ? c.style.strokeColor : null,
-        caption: typeof caption === 'string' ? caption : null,
-      };
-    });
+    return items.map((item) => this.snapConnector(item));
+  }
+
+  // One connector, fetched fresh (getById, Level 1 — not the board-wide Level 3
+  // sweep `connectors` makes). null is the board's answer: no such connector —
+  // deleted, or the id belongs to an item of another type.
+  async connectorById(id: string): Promise<CanvasConnector | null> {
+    const item = await this.fetchLiveById(id);
+    if (!item || item.type !== 'connector') return null;
+    return this.snapConnector(item);
+  }
+
+  async getFresh(ids: string[]): Promise<CanvasElement[]> {
+    const items = await Promise.all(ids.map((id) => this.fetchLiveById(id)));
+    return items
+      .filter((item): item is LiveItem => item !== null)
+      .map((item) => this.snap(item));
   }
 
   async groups(): Promise<CanvasGroup[]> {

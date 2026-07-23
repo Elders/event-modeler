@@ -154,9 +154,18 @@ export interface Canvas {
 
   // Queries.
   get(ids: string[]): Promise<CanvasElement[]>;
+  // Like `get`, but answered by the host itself, never from a cached handle —
+  // for reads that act on an element's CURRENT state (its position, its text),
+  // where a stale answer is silently wrong rather than merely slow. Ids that no
+  // longer exist are omitted from the result: absence is a value. A failure to
+  // look throws, as everywhere.
+  getFresh(ids: string[]): Promise<CanvasElement[]>;
   containers(): Promise<CanvasElement[]>;
   childrenOf(containerId: string): Promise<CanvasElement[]>;
   connectors(): Promise<CanvasConnector[]>;
+  // One connector, fetched fresh (see getFresh). null means the host answered:
+  // no such connector — deleted, or the id names an element of another kind.
+  connectorById(id: string): Promise<CanvasConnector | null>;
   groups(): Promise<CanvasGroup[]>;
   selection(): Promise<CanvasElement[]>;
 

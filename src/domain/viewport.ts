@@ -27,6 +27,17 @@ export function boundingBox(boxes: Box[]): Box | null {
   return { x: (left + right) / 2, y: (top + bottom) / 2, width: right - left, height: bottom - top };
 }
 
+// The viewport for an explicit "take me there": centered on the box, at the
+// current zoom — the width and height are kept, so navigating never zooms in —
+// growing only when the box (plus margin) doesn't fit the current size. The
+// deliberate difference from expansionToInclude below: that one keeps what's
+// on screen and adds, this one goes.
+export function panTo(viewport: Rect, box: Box, margin = 100): Rect {
+  const width = Math.max(viewport.width, box.width + margin * 2);
+  const height = Math.max(viewport.height, box.height + margin * 2);
+  return { x: box.x - width / 2, y: box.y - height / 2, width, height };
+}
+
 // Returns the smallest viewport that contains the current one plus every box
 // (with margin), or null when everything already fits. Never shrinks the
 // viewport, so the host never zooms in — it only ever expands to include.

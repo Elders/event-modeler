@@ -211,6 +211,28 @@ Where fields appear on the board:
   fields box by an internal tag, so a shape you drew and grouped with a
   screen is never touched.
 
+**Selecting an arrow.** Select a single arrow and the Fields tab becomes a
+toolset for the connection itself. The header names what the arrow joins
+(with each side's field count), and the buttons are:
+
+- **Copy → / Copy ←** — copy fields across the arrow, with or against its
+  direction. A copy **merges**: the receiver keeps everything it has, and only
+  fields it doesn't carry yet (matched by name) are added. The receiver's
+  version of a shared name is never touched.
+- **Replace → / Replace ←** — overwrite the receiver's whole field list with
+  the other end's.
+- **Navigate to \<block\>** — one button per attached end (e.g. *Navigate to
+  command* and *Navigate to event*), panning the view to that block at your
+  current zoom. When both ends are the same kind of block, the button shows
+  the block's name too.
+
+A copied field keeps its type, `[]`, `?` and example, but drops its fed-by
+alias and its `!` — those describe how *that* block gets or makes the value,
+which isn't true of the block receiving the copy. Errors and notes can't carry
+fields, so copying onto them is disabled, and a copy from a block with no
+fields does nothing. The buttons always act on what the board holds at the
+moment you click, so edits made on the board seconds earlier are respected.
+
 ---
 
 ## 5. The completeness check (why an arrow turns red)

@@ -27,6 +27,7 @@ import { resolveFieldTargets, type FieldTarget } from '../features/fields/recogn
 import { syncFieldsFromBoard } from '../features/fields/sync';
 import { displayMode, newField, type Field } from '../features/fields/model';
 import { services } from '../services';
+import { ArrowSection } from './ArrowSection';
 import { FieldRow } from './FieldRow';
 import { useDragReorder } from './useDragReorder';
 import { useSelection } from './useSelection';
@@ -369,6 +370,13 @@ export function FieldsSection() {
         <p className="footnote">Retrying on its own. See the Console tab.</p>
       </section>
     );
+  }
+
+  // Exactly one arrow selected: the tab becomes the arrow toolset (copy fields
+  // across it, navigate to its ends). Only the single-connector selection —
+  // with anything else alongside, the arrow is context, not the subject.
+  if (selection.length === 1 && selection[0].kind === 'connector') {
+    return <ArrowSection connectorId={selection[0].id} />;
   }
 
   // Several blocks selected. The editor could show one of them — it used to —
