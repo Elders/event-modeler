@@ -67,6 +67,15 @@ completeness check (§7).
 - **Native citizens.** After creation, elements are fully editable with the
   canvas's native tools (move, resize, relabel, restyle, delete, link) and are
   indistinguishable from hand-made elements of the same kind.
+- **Named.** Every element keeps its display name where the canvas itself
+  keeps one — a card's first text line, a screen's/automation's grouped title
+  text, a container's own title, a shape's own text, a chapter's line caption —
+  and the panel's Properties editor exposes that name for the current
+  selection, editable in place. Renaming from the panel and renaming natively
+  are the same edit; a card's name is only its first line, so a rename never
+  disturbs the field lines (or a note's prose) beneath it. A
+  screen/automation whose title text was deleted gets it recreated by the next
+  rename.
 - **Field-bearing.** Most typed elements can carry data fields (§5); the tool
   reads and writes those fields without removing the element's native
   editability.
@@ -195,11 +204,12 @@ Fields are editable from **both** directions, and the two stay reconciled:
 
 - **On the board** — the user types `name : type` lines directly on a card, or
   in an attached box; the tool parses them back into fields.
-- **In the panel** — a field editor reflects the current selection. At rest it
-  lists each field as the same notation line the canvas renders, so the list
-  teaches the notation the user can then type directly on the element; opening
-  a field offers a name input, a type picker, a toggle per mark, and inputs
-  for the fed-by names and the example, with add, remove and reorder controls.
+- **In the panel** — the Properties editor reflects the current selection: the
+  element's name at the top (§3), then each field as the same notation line
+  the canvas renders, so the list teaches the notation the user can then type
+  directly on the element; opening a field offers a name input, a type picker,
+  a toggle per mark, and inputs for the fed-by names and the example, with
+  add, remove and reorder controls.
 
 Board-side edits are authoritative, in both displays: a manual edit on a card
 or in a box is read back into the tool's record and never silently overwritten.
@@ -433,9 +443,11 @@ shows it in the panel — the visible half of the "never fabricate" rule (§9).
 
 ### 8.7 Arrow tools
 
-- When the selection is **exactly one link**, the Fields tab shows the arrow
-  toolset instead of the field editor: four field-transfer buttons and one
-  navigation button per attached end.
+- When the selection is **exactly one attached link**, the Properties tab
+  shows the arrow toolset instead of the field editor: four field-transfer
+  buttons and one navigation button per attached end. A **free-floating** link
+  (both ends unattached — a chapter, §4.6) gets the name editor instead: its
+  caption is its name.
 - **Copy** (with or against the link's direction) merges the source end's
   fields into the target end's: fields are matched **by name only** (the
   completeness check's identity), the target's version of a shared name is

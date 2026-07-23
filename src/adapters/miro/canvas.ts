@@ -48,6 +48,7 @@ type WriteView = {
   width?: number;
   height?: number;
   content?: string;
+  title?: string;
   style?: { fillColor?: string; fontSize?: number; textAlign?: string; textAlignVertical?: string };
   sync(): Promise<unknown>;
 };
@@ -384,6 +385,7 @@ export class MiroCanvas implements Canvas {
       if (patch.width !== undefined && 'width' in item) w.width = patch.width;
       if (patch.height !== undefined && 'height' in item) w.height = patch.height;
       if (patch.content !== undefined && 'content' in item) w.content = patch.content;
+      if (patch.title !== undefined && 'title' in item) w.title = patch.title;
       if (patch.color !== undefined && w.style) w.style.fillColor = patch.color;
       if (patch.fontSize !== undefined && w.style) w.style.fontSize = patch.fontSize;
       if (patch.textAlign !== undefined && w.style) w.style.textAlign = patch.textAlign;

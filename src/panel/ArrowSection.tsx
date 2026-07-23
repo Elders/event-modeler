@@ -1,7 +1,8 @@
-// The Fields tab's view of a selected arrow: move the connected blocks' fields
-// across it (copy merges, replace overwrites — in either direction), and
-// navigate the viewport to either end. Rendered by FieldsSection when the
-// selection is exactly one connector.
+// The Properties tab's view of a selected arrow: move the connected blocks'
+// fields across it (copy merges, replace overwrites — in either direction), and
+// navigate the viewport to either end. Rendered by PropertiesSection when the
+// selection is exactly one attached connector (a free-floating one is a chapter
+// and gets the name editor instead).
 //
 // The layout speaks the panel's own visual language: each direction is a card
 // naming its ends with the vocabulary dots ("● Command → ● Event") over a
@@ -142,7 +143,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   if (failure) {
     return (
       <section className="section">
-        <h2 className="section-title">Fields</h2>
+        <h2 className="section-title">Properties</h2>
         <p className="arrow-failure">Couldn't read the arrow, so its tools aren't shown.</p>
         <p className="arrow-failure-reason">{failure}</p>
         <button
@@ -160,7 +161,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   if (!loaded && !info) {
     return (
       <section className="section">
-        <h2 className="section-title">Fields</h2>
+        <h2 className="section-title">Properties</h2>
         <p className="section-sub">Arrow</p>
         <p className="arrow-note">Reading the arrow…</p>
       </section>
@@ -170,7 +171,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   if (!info) {
     return (
       <section className="section">
-        <h2 className="section-title">Fields</h2>
+        <h2 className="section-title">Properties</h2>
         <p className="section-sub">Arrow</p>
         <p className="arrow-note">This arrow no longer exists on the board.</p>
       </section>
@@ -253,7 +254,7 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
 
   return (
     <section className="section">
-      <h2 className="section-title">Fields</h2>
+      <h2 className="section-title">Properties</h2>
       <p className="section-sub">Arrow</p>
 
       {start && end ? (

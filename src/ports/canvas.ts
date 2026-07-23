@@ -64,6 +64,8 @@ export interface ElementPatch {
   width?: number;
   height?: number;
   content?: string;
+  // The host's own name slot for elements that have one (a frame's title).
+  title?: string;
   color?: string;
   fontSize?: number;
   textAlign?: 'left' | 'center' | 'right';

@@ -1,5 +1,5 @@
 // Adopts plain frames into typed model structures. Reacts to the board
-// selection (mirroring FieldsSection): a plain frame offers a slice/spec choice.
+// selection (mirroring PropertiesSection): a plain frame offers a slice/spec choice.
 // (Sticky notes need no conversion — their fill color already denotes their block
 // type.) Conversion is a deliberate transform on the selection, so it lives in
 // the panel rather than as an on-canvas affordance (there's nothing to anchor one

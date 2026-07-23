@@ -1,0 +1,29 @@
+/* The name input: styled like the field inputs but a step more prominent —
+   it is the element's title, not one line among many. */
+
+.name-editor {
+  margin: 0 0 10px;
+}
+
+.name-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--em-ink);
+  background: #fff;
+}
+
+.name-input:focus {
+  outline: none;
+  border-color: #4262ff;
+}
+
+.name-input::placeholder {
+  font-weight: 400;
+  color: var(--em-hint);
+}

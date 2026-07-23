@@ -1149,6 +1149,56 @@ against now instead of against whatever the panel editor last saw of that
 block — without it, copying onto a block edited on the board since it was last
 open in the editor would refuse as a phantom conflict.
 
+## The Properties tab: names join fields (2026-07-23)
+
+The Fields tab is renamed **Properties**, and it now opens with the selected
+element's **name**, editable, above the field list. The rename is honest
+labeling: the tab stopped being only about fields the moment it edited names —
+and it now answers for elements that never carry fields at all.
+
+**A name lives where Miro already keeps it.** No name registry, no app-data:
+a sticky's name is its first text line (as it always was for fields), a
+screen/automation's is the title text grouped above the image, a slice/spec/
+plain frame's is the frame's own `title`, a swimlane's is the shape's own
+text, and a chapter's is the caption on the arrow. Editing the name in the
+panel and renaming natively on the board are therefore the same edit — the
+panel is a second door to the same text, exactly the both-directions contract
+fields already follow. The one new Canvas capability this needed was a `title`
+field on `ElementPatch` (frames have a title slot, not content).
+
+**Renames rewrite the first line only, verbatim body.** The obvious
+implementation — parse the sticky, re-render name + fields — would have
+corrupted notes: the field parser turns a prose line into a field (`some
+sentence : string`), so a rename would have appended `: string` to every line
+of a note's body. `domain/naming.replaceFirstLine` swaps the head paragraph
+and keeps everything after it byte-for-byte, which makes renaming safe for
+every card uniformly — typed blocks, notes, errors — without knowing which it
+is.
+
+**A free-floating connector is a chapter; an attached one is an arrow.** Both
+arrive as "exactly one connector selected", and the tab used to hand every
+such selection to the arrow toolset. Now it asks the board first: endpoints
+attached → the toolset; both ends free → the chapter name editor (the toolset
+would render only refusals for a free arrow anyway). Chapter identity has no
+tag to check — chapters deliberately carry no metadata — so free-endpoints is
+the test, which also covers sub-chapters and reads any hand-drawn free arrow
+as an annotation. Accepted: labeling every untagged plain shape "Swimlane" is
+the same class of generosity (the app can't tell its swimlanes from user
+rectangles because lanes are deliberately untracked), and a name editor on a
+decorative shape edits text the user owns anyway.
+
+**A missing screen title is recreated by the next rename**, grouped back with
+the element via the same `addTitleAbove` used at creation — the self-healing
+idiom the fields box already follows. The rename hands the new text's id back
+to the panel, which keeps editing it — without that hand-back a stale "no
+title" state would spawn a fresh title text on every subsequent rename.
+
+**The auto-jump stays blocks-and-connectors only.** The tab could now claim
+every frame and shape selection, but selecting a slice to drag it or a lane to
+resize it is everyday board work — yanking the panel over on each such click
+would turn the shortcut into a nuisance. Selecting a chapter does jump (it
+rides the existing single-connector trigger).
+
 ## Workflow conventions
 
 - **master is the production branch.** Every push to master builds and

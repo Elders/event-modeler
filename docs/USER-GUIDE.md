@@ -46,10 +46,11 @@ tool and the app understands the result.
 
 1. Open a Miro board where the Event Modeler app is installed.
 2. Click the app's icon in Miro's left toolbar — the panel opens.
-3. The panel has four tabs: **Build** (the manual palette), **Fields** (the
-   data editor for the selected block), **Generate** (draft a model from text
-   with AI), and **Console** (anything the app failed to do — the tab marks
-   itself when there's something to see, so you can ignore it until it does).
+3. The panel has four tabs: **Build** (the manual palette), **Properties**
+   (the name and fields of the selected element), **Generate** (draft a model
+   from text with AI), and **Console** (anything the app failed to do — the
+   tab marks itself when there's something to see, so you can ignore it until
+   it does).
 
 The app is an assistant, not a replacement for Miro: everything it places is
 an ordinary Miro item afterward. You move, resize, relabel, restyle, connect,
@@ -124,13 +125,37 @@ anchor patterns like any other block.
 
 ---
 
-## 4. The Fields tab
+## 4. The Properties tab
+
+The Properties tab edits the selected element: its **name** at the top, and —
+for blocks that carry data — its **fields** below.
+
+### 4.1 Names
+
+Every named element shows an editable name input at the top of the tab. The
+name lives where Miro already keeps it, so editing it here and editing it on
+the board are the same thing:
+
+- **Sticky blocks** (and notes and errors) — the first line of the sticky's
+  own text.
+- **Screens & automations** — the title text grouped above the image. If the
+  title text was deleted, typing a name recreates it.
+- **Slices, specifications, and plain frames** — the frame's own title.
+- **Swimlanes** (and other plain shapes) — the shape's own text.
+- **Chapters** — the caption riding on the arrow. Select the chapter arrow and
+  the tab offers its name; clearing it removes the caption.
+
+Type the name and press **Enter** (or click away) to apply; **Escape**
+discards the edit.
+
+### 4.2 Fields
 
 Fields are the data a block carries — the payload that flows through the
 model. Every block except errors and notes can carry them: commands, events,
 read models, external events, screens, and automations.
 
-1. Select a block on the board; the Fields tab shows its type and fields.
+1. Select a block on the board; the Properties tab shows its type, name, and
+   fields.
 2. The list is an **accordion**: every field is one collapsed line showing
    exactly what the board renders — `full_name > name : string[]? = Ada` —
    with a dimmer second line for the example when the field has one. Click a
@@ -211,9 +236,10 @@ Where fields appear on the board:
   fields box by an internal tag, so a shape you drew and grouped with a
   screen is never touched.
 
-**Selecting an arrow.** Select a single arrow and the Fields tab becomes a
-toolset for the connection itself. The header names what the arrow joins
-(with each side's field count), and the buttons are:
+**Selecting an arrow.** Select a single arrow between blocks and the
+Properties tab becomes a toolset for the connection itself. (A free-floating
+arrow — a chapter — gets the name editor instead, per §4.1.) The header names
+what the arrow joins (with each side's field count), and the buttons are:
 
 - **Copy → / Copy ←** — copy fields across the arrow, with or against its
   direction. A copy **merges**: the receiver keeps everything it has, and only
@@ -418,4 +444,4 @@ you had placed it by hand.
   inside pattern stamps and generated models.
 - **The board display is the source of truth for fields** — feel free to edit
   `name : type` lines right on a sticky, or in a screen's/automation's
-  attached box; the Fields tab picks the edits up.
+  attached box; the Properties tab picks the edits up.

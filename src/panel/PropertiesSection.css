@@ -1,6 +1,7 @@
-/* The Fields editor's own chrome: the failure state, the accordion list, and
-   the drag-reorder visuals. Everything inside a row — the collapsed notation
-   line and the open editor card — lives in FieldRow.css; here a row is just a
+/* The Properties editor's own chrome: the failure state, the fields accordion
+   list, and the drag-reorder visuals. The name input lives in NameEditor.css;
+   everything inside a field row — the collapsed notation line and the open
+   editor card — lives in FieldRow.css; here a row is just a
    drag target. Rows reorder by dragging the grip; the insertion point renders
    as a line in the gap between rows (pseudo-elements, so no layout shift
    while dragging). */

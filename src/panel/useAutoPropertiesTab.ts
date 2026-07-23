@@ -1,12 +1,16 @@
-// Brings the Fields tab forward when the board selection becomes something it
-// can act on: a single connector (the arrow toolset) or a selection resolving
-// to exactly one field-bearing block (the editor) — the same two conditions
-// FieldsSection itself acts under, so the jump never lands on a refusal.
+// Brings the Properties tab forward when the board selection becomes something
+// it can act on: a single connector (the arrow toolset, or a chapter's name) or
+// a selection resolving to exactly one field-bearing block (the editor) — the
+// same conditions PropertiesSection itself acts under, so the jump never lands
+// on a refusal. Deliberately NOT extended to frames and shapes, even though the
+// tab can now name them: selecting a slice to move it or a swimlane to resize
+// it is everyday board work, and yanking the panel over on every such click
+// would make the jump a nuisance instead of a shortcut.
 //
 // Live selection events only, never the seeded read: the trigger is the *act*
 // of selecting while the panel is open, not the state of something sitting
 // selected — a panel opened over an old selection must not jump on its own.
-// That also makes a manual tab choice stick: leaving Fields with the block
+// That also makes a manual tab choice stick: leaving Properties with the block
 // still selected fires no new event, so nothing drags the user back.
 
 import { useEffect } from 'react';
@@ -17,18 +21,19 @@ import type { SelectionItem } from '../ports/runtime';
 import { services } from '../services';
 import type { PanelTabId } from './PanelTabs';
 
-export function useAutoFieldsTab(tab: PanelTabId, setTab: (id: PanelTabId) => void) {
+export function useAutoPropertiesTab(tab: PanelTabId, setTab: (id: PanelTabId) => void) {
   useEffect(() => {
-    // Already there — don't spend reads confirming it. FieldsSection owns the
-    // selection while it is on screen.
-    if (tab === 'fields') return;
+    // Already there — don't spend reads confirming it. PropertiesSection owns
+    // the selection while it is on screen.
+    if (tab === 'properties') return;
     let cancelled = false;
 
     const consider = async (items: SelectionItem[]) => {
-      // Exactly one connector selected: FieldsSection becomes the arrow
-      // toolset. The event already carries the kind, so this costs nothing.
+      // Exactly one connector selected: PropertiesSection becomes the arrow
+      // toolset (or a chapter's name editor). The event already carries the
+      // kind, so this costs nothing.
       if (items.length === 1 && items[0].kind === 'connector') {
-        setTab('fields');
+        setTab('properties');
         return;
       }
       // The element case costs metadata reads. Nobody asked for this jump by
@@ -37,7 +42,7 @@ export function useAutoFieldsTab(tab: PanelTabId, setTab: (id: PanelTabId) => vo
       if (isBoardRateLimited()) return;
       const targets = await resolveFieldTargets(items);
       if (cancelled) return;
-      if (targets.length === 1) setTab('fields');
+      if (targets.length === 1) setTab('properties');
     };
 
     const unsubscribe = services().runtime.onSelectionChange((items) => {
@@ -46,7 +51,7 @@ export function useAutoFieldsTab(tab: PanelTabId, setTab: (id: PanelTabId) => vo
       // the failure is reported and the next selection event tries afresh.
       void consider(items).catch((error) => {
         if (cancelled) return;
-        reportToLog('Could not resolve the selection for the Fields tab jump', error);
+        reportToLog('Could not resolve the selection for the Properties tab jump', error);
       });
     });
 

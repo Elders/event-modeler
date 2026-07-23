@@ -1,10 +1,13 @@
-// The Fields editor: reacts to the board selection and lets the user define
-// fields on the selected block. Resolves the first fieldable element in the
-// selection (a screen's box/title share the group, so we scan past them via
-// each item's meta), and shows the fields as an accordion of FieldRows: every
-// row is the field's board notation on one line, and the single open row is
-// the full editor. Rows reorder by dragging the grip (or arrow keys on it),
-// and every change persists through the fields use-case — serialized in
+// The Properties editor: reacts to the board selection and shows the selected
+// element's properties — its name (every named element: blocks, slices, specs,
+// swimlanes, chapters) and, for field-bearing blocks, its fields. The name is
+// resolved through features/naming (each element kind keeps its name where
+// Miro already keeps it); the fields resolve to the first fieldable element in
+// the selection (a screen's box/title share the group, so we scan past them
+// via each item's meta) and render as an accordion of FieldRows: every row is
+// the field's board notation on one line, and the single open row is the full
+// editor. Rows reorder by dragging the grip (or arrow keys on it), and every
+// change persists through the fields use-case — serialized in
 // features/fields/edit, so we save optimistically without a busy lock.
 //
 // Reading the board can fail, and this must never render a failure as an answer.
@@ -13,8 +16,9 @@
 // for the hour the credit budget took to refill (see DECISIONS.md). So: a
 // failure is its own state, it says so on screen, and it retries.
 
-import './FieldsSection.css';
+import './PropertiesSection.css';
 import { useEffect, useRef, useState } from 'react';
+import { extractName } from '../domain/fields';
 import { FALLBACK_CHECK_MS, SETTLE_MS, fallbackDue } from '../domain/pacing';
 import { BLOCKS, type BlockType } from '../domain/vocabulary';
 import { completenessHousekeeping } from '../features/completeness';
@@ -26,9 +30,17 @@ import { setFields as saveFields } from '../features/fields/edit';
 import { resolveFieldTargets, type FieldTarget } from '../features/fields/recognize';
 import { syncFieldsFromBoard } from '../features/fields/sync';
 import { displayMode, newField, type Field } from '../features/fields/model';
+import {
+  renameSubject,
+  resolveConnectorSubject,
+  resolveNameSubject,
+  type NameSubject,
+  type NameSubjectKind,
+} from '../features/naming';
 import { services } from '../services';
 import { ArrowSection } from './ArrowSection';
 import { FieldRow } from './FieldRow';
+import { NameEditor } from './NameEditor';
 import { useDragReorder } from './useDragReorder';
 import { useSelection } from './useSelection';
 
@@ -42,6 +54,15 @@ function blockLabel(type: BlockType): string {
   return BLOCKS.find((block) => block.type === type)?.label ?? type;
 }
 
+// Where each kind of element keeps its name, for the name-only view's footnote.
+const SUBJECT_HINT: Record<NameSubjectKind, string> = {
+  sticky: "The name is the sticky's first text line.",
+  title: 'The name is the title text grouped with the element.',
+  container: "The name is the frame's own title.",
+  shape: "The name is the shape's own text.",
+  caption: 'The name rides on the arrow as its caption.',
+};
+
 // True only when the user is actually typing in one of our inputs. The
 // document.activeElement half is not enough on its own: this panel is an iframe,
 // and a blurred document keeps reporting its last focused element forever — so
@@ -50,27 +71,39 @@ function blockLabel(type: BlockType): string {
 function editingInPanel(): boolean {
   if (!document.hasFocus()) return false;
   const active = document.activeElement;
-  return active instanceof HTMLElement && active.classList.contains('field-input');
+  return (
+    active instanceof HTMLElement &&
+    (active.classList.contains('field-input') || active.classList.contains('name-input'))
+  );
 }
 
-export function FieldsSection() {
+export function PropertiesSection() {
   // A selection we couldn't read is a failure too — and it has to win over the
   // "nothing selected" placeholder for exactly the same reason as our own reads.
   const { items: selection, failure: selectionFailure } = useSelection();
   const selectionKey = selection.map((item) => item.id).join(',');
+  const loneConnector = selection.length === 1 && selection[0].kind === 'connector';
   // Every field-bearing block in the selection, not just one of them. The editor
   // acts only when there is exactly one: Miro reports a selection in its own
   // order, so picking "the first" picked an arbitrary block and then edited it
   // without saying which.
   const [targets, setTargets] = useState<FieldTarget[]>([]);
   const target = targets.length === 1 ? targets[0] : null;
+  // The named element the selection is about (a block, a slice, a swimlane, a
+  // chapter…), or null when there is none.
+  const [subject, setSubject] = useState<NameSubject | null>(null);
+  // What a lone selected connector turned out to be — decided before rendering
+  // either view, so a chapter never flashes the arrow toolset first.
+  const [connectorView, setConnectorView] = useState<'pending' | 'arrow' | 'chapter' | 'gone'>(
+    'pending',
+  );
   const [fields, setFields] = useState<Field[]>([]);
   // The accordion: the one field whose editor is open, or null for none. New
   // fields open on creation; a different element's fields load all closed.
   const [openId, setOpenId] = useState<string | null>(null);
   // Why the editor has nothing to show, when it has nothing to show. null means
   // the board answered; a string means it didn't, and the editor says so instead
-  // of pretending the selection isn't fieldable.
+  // of pretending the selection isn't editable.
   const [failure, setFailure] = useState<string | null>(null);
   // Bumped to force a re-read of the same selection (the Retry button, and the
   // timer below).
@@ -80,15 +113,33 @@ export function FieldsSection() {
   // landing after an edit) can't clobber what the user is actively editing.
   const loadedId = useRef<string | null>(null);
 
-  // Re-resolve the targets whenever the selected ids change; reload the fields
-  // only when the single resolved target is a *different* element.
+  // Re-resolve the targets and the name subject whenever the selected ids
+  // change; reload the fields only when the single resolved target is a
+  // *different* element.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const found = await resolveFieldTargets(selection);
+        // A lone connector is its own question: chapter or arrow toolset.
+        if (loneConnector) {
+          const resolved = await resolveConnectorSubject(selection[0].id);
+          if (cancelled) return;
+          setTargets([]);
+          setFields([]);
+          loadedId.current = null;
+          setSubject(resolved.kind === 'chapter' ? resolved.subject : null);
+          setConnectorView(resolved.kind);
+          setFailure(null);
+          return;
+        }
+        setConnectorView('pending');
+        const [found, named] = await Promise.all([
+          resolveFieldTargets(selection),
+          resolveNameSubject(selection),
+        ]);
         if (cancelled) return;
         setTargets(found);
+        setSubject(named);
         setFailure(null);
         // Only ever load for exactly one. Several selected blocks is a question
         // for the user, not a block for us to pick.
@@ -108,14 +159,15 @@ export function FieldsSection() {
         loadedId.current = foundId;
       } catch (error) {
         if (cancelled) return;
-        reportToLog("Could not read the selected element's fields", error);
+        reportToLog("Could not read the selected element's properties", error);
         loadedId.current = null; // nothing was loaded — let a retry re-read it
         setFields([]); // don't leave another element's fields on screen
-        // Drop the targets as well. They would otherwise keep their stale value
-        // (the throw happened before setTargets), leaving the watch below running
-        // against the old element while this failure is on screen — spending API
-        // credits on the board that just told us it has none.
+        // Drop the targets and subject as well. They would otherwise keep their
+        // stale value (the throw happened before the sets), leaving the watch
+        // below running against the old element while this failure is on screen
+        // — spending API credits on the board that just told us it has none.
         setTargets([]);
+        setSubject(null);
         setFailure(failureReason(error));
       }
     })();
@@ -149,7 +201,7 @@ export function FieldsSection() {
   //
   // Activity-driven rather than on a fixed clock, for exactly the reason the
   // board script's passes are (see domain/pacing): the read is a `board.get` at
-  // 500 credits, so the fixed 2.5s interval this replaces cost 12,000 credits a
+  // 500 credits, so the fixed 2.5s interval this replaced cost 12,000 credits a
   // minute — 720,000/hour, most of the hourly budget — for one block sitting
   // selected while nobody touched anything.
   //
@@ -191,6 +243,16 @@ export function FieldsSection() {
       const reconciled = await syncFieldsFromBoard(id, type);
       if (stopped) return;
       setFields(reconciled);
+      // A sticky's watched text carries its name on the first line, so a rename
+      // made on the board rides the same read (box-mode names live in a separate
+      // title text and refresh on re-selection).
+      if (displayMode(type) === 'text') {
+        setSubject((current) =>
+          current && current.id === id && current.kind === 'sticky'
+            ? { ...current, name: extractName(content) }
+            : current,
+        );
+      }
       // Recorded only after the reconcile lands. Setting it first meant a failed
       // reconcile still marked the content as seen, and every later read then
       // skipped it as unchanged — the watch stayed alive but did nothing.
@@ -251,6 +313,30 @@ export function FieldsSection() {
   useEffect(() => {
     shownId.current = target?.id ?? null;
   }, [target?.id]);
+
+  // Rename the subject on the board. Optimistic — the input would otherwise
+  // snap back to the old name while the write is in flight — and the resolved
+  // subject replaces the shown one: a rename that had to recreate a missing
+  // screen title hands back the new text's id, which must be edited next time,
+  // not recreated again. Applied only while the same element is still on screen.
+  const subjectShown = useRef<string | null>(null);
+  useEffect(() => {
+    subjectShown.current = subject?.id ?? null;
+  }, [subject?.id]);
+
+  const rename = (next: string) => {
+    if (!subject) return;
+    const before = subject;
+    setSubject({ ...subject, name: next });
+    void renameSubject(before, next)
+      .then((updated) => {
+        if (subjectShown.current === updated.id) setSubject(updated);
+      })
+      .catch((error) => {
+        if (subjectShown.current === before.id) setSubject(before);
+        void reportError(error);
+      });
+  };
 
   // Write through to the board, and take the board's answer for it. The write is
   // abandoned rather than applied when the block's fields changed underneath this
@@ -348,14 +434,14 @@ export function FieldsSection() {
 
   // The board didn't answer — about the selection, or about the element in it.
   // Saying so is the entire point: this is the state that used to render as the
-  // placeholder below, which reads as "your selection has no fields" — a claim
-  // we cannot make when we couldn't read it.
+  // placeholder below, which reads as "your selection has no properties" — a
+  // claim we cannot make when we couldn't read it.
   const unreadable = selectionFailure ?? failure;
   if (unreadable) {
     return (
       <section className="section">
-        <h2 className="section-title">Fields</h2>
-        <p className="fields-failure">Couldn't read the board, so the fields aren't shown.</p>
+        <h2 className="section-title">Properties</h2>
+        <p className="fields-failure">Couldn't read the board, so the properties aren't shown.</p>
         <p className="fields-failure-reason">{unreadable}</p>
         <button
           className="button button-small w-full"
@@ -372,11 +458,30 @@ export function FieldsSection() {
     );
   }
 
-  // Exactly one arrow selected: the tab becomes the arrow toolset (copy fields
-  // across it, navigate to its ends). Only the single-connector selection —
-  // with anything else alongside, the arrow is context, not the subject.
-  if (selection.length === 1 && selection[0].kind === 'connector') {
-    return <ArrowSection connectorId={selection[0].id} />;
+  // Exactly one arrow selected: an attached arrow gets the arrow toolset (copy
+  // fields across it, navigate to its ends); a free-floating one is a chapter
+  // whose caption is its name, and falls through to the name view below. Only
+  // the single-connector selection — with anything else alongside, the arrow is
+  // context, not the subject.
+  if (loneConnector) {
+    if (connectorView === 'arrow') return <ArrowSection connectorId={selection[0].id} />;
+    if (connectorView === 'gone') {
+      return (
+        <section className="section">
+          <h2 className="section-title">Properties</h2>
+          <p className="section-sub">Arrow</p>
+          <p className="section-sub">This arrow no longer exists on the board.</p>
+        </section>
+      );
+    }
+    if (connectorView === 'pending' || !subject) {
+      return (
+        <section className="section">
+          <h2 className="section-title">Properties</h2>
+          <p className="section-sub">Reading the selection…</p>
+        </section>
+      );
+    }
   }
 
   // Several blocks selected. The editor could show one of them — it used to —
@@ -386,21 +491,34 @@ export function FieldsSection() {
   if (targets.length > 1) {
     return (
       <section className="section">
-        <h2 className="section-title">Fields</h2>
+        <h2 className="section-title">Properties</h2>
         <p className="section-sub">
-          {targets.length} blocks selected — select a single one to edit its fields.
+          {targets.length} blocks selected — select a single one to edit its properties.
         </p>
       </section>
     );
   }
 
   if (!target) {
+    // Something named but field-less: a slice, a spec, a swimlane, a chapter, a
+    // note — the name is its one editable property.
+    if (subject) {
+      return (
+        <section className="section">
+          <h2 className="section-title">Properties</h2>
+          <p className="section-sub">{subject.label}</p>
+          <NameEditor name={subject.name} onCommit={rename} />
+          <p className="footnote">{SUBJECT_HINT[subject.kind]}</p>
+        </section>
+      );
+    }
     return (
       <section className="section">
-        <h2 className="section-title">Fields</h2>
+        <h2 className="section-title">Properties</h2>
         <p className="section-sub">
-          Select a command, event, read model, external event, screen, or automation to define
-          its fields.
+          Select an element — a block, slice, specification, swimlane, or chapter — to edit its
+          name; command, event, read model, external event, screen, and automation blocks also
+          carry fields.
         </p>
       </section>
     );
@@ -408,8 +526,9 @@ export function FieldsSection() {
 
   return (
     <section className="section">
-      <h2 className="section-title">Fields</h2>
+      <h2 className="section-title">Properties</h2>
       <p className="section-sub">{blockLabel(target.type)}</p>
+      {subject && <NameEditor name={subject.name} onCommit={rename} />}
 
       <div className="fields-list" {...reorder.listProps}>
         {fields.map((field, index) => (

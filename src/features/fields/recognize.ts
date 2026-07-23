@@ -46,7 +46,7 @@ export async function resolveFieldTargets(items: SelectionItem[]): Promise<Field
   let unresolved: SelectionItem[] = [];
 
   // Live metadata recognizes most elements, one read each. Trying it first —
-  // before the registry and color reads below — is what keeps the Fields tab
+  // before the registry and color reads below — is what keeps the Properties tab
   // responsive when the panel opens on a fresh board, where every extra
   // round-trip is slow (the SDK bridge is warming up and competing for the API
   // budget) and would visibly delay the fields appearing.

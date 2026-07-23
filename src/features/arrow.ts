@@ -1,4 +1,4 @@
-// The arrow toolset behind the Fields tab's connector view: what a selected
+// The arrow toolset behind the Properties tab's connector view: what a selected
 // arrow connects, moving fields across it, and navigating to either end.
 //
 // Everything here is user-triggered — nothing polls, nothing runs unattended —

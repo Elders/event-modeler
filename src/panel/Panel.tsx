@@ -6,11 +6,11 @@ import { useState } from 'react';
 import { BuildingBlocksSection } from './BuildingBlocksSection';
 import { ConsoleSection } from './ConsoleSection';
 import { ConvertSection } from './ConvertSection';
-import { FieldsSection } from './FieldsSection';
 import { GenerateSection } from './GenerateSection';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
 import { PatternsSection } from './PatternsSection';
-import { useAutoFieldsTab } from './useAutoFieldsTab';
+import { PropertiesSection } from './PropertiesSection';
+import { useAutoPropertiesTab } from './useAutoPropertiesTab';
 import { useBusyGuard } from './useBusyGuard';
 import { useLogSummary } from './useLogSummary';
 
@@ -18,8 +18,8 @@ export function Panel() {
   const { busy, guard } = useBusyGuard();
   const [tab, setTab] = useState<PanelTabId>('build');
   // Selecting a field-bearing block or a single arrow on the board brings the
-  // Fields tab forward on its own.
-  useAutoFieldsTab(tab, setTab);
+  // Properties tab forward on its own.
+  useAutoPropertiesTab(tab, setTab);
   // Mark the Console tab whenever anything has been recorded. The failures it
   // collects happen on the board page with the panel shut, so without this the
   // tab is only ever opened by someone who already suspects something.
@@ -39,8 +39,8 @@ export function Panel() {
             <PatternsSection busy={busy} guard={guard} />
             <ConvertSection busy={busy} guard={guard} />
           </>
-        ) : tab === 'fields' ? (
-          <FieldsSection />
+        ) : tab === 'properties' ? (
+          <PropertiesSection />
         ) : tab === 'generate' ? (
           <GenerateSection busy={busy} guard={guard} />
         ) : (
