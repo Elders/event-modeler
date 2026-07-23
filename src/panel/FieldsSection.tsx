@@ -437,7 +437,7 @@ export function FieldsSection() {
       </div>
 
       <button
-        className="button button-small w-full"
+        className="field-add"
         type="button"
         onClick={() => {
           const added = newField();
@@ -446,7 +446,10 @@ export function FieldsSection() {
           save([...fields, added]);
         }}
       >
-        + Add field
+        <span className="field-add-label">Add field</span>
+        <span className="field-add-plus" aria-hidden="true">
+          +
+        </span>
       </button>
     </section>
   );

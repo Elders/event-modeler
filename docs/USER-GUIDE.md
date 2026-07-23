@@ -135,8 +135,8 @@ read models, external events, screens, and automations.
    exactly what the board renders — `full_name > name : string[]? = Ada` —
    with a dimmer second line for the example when the field has one. Click a
    line to open its editor (one open at a time); **Escape** or a click on the
-   editor's background closes it. **+ Add field** appends a fresh field and
-   opens it.
+   editor's background closes it. The **Add field** row appends a fresh field
+   and opens it.
 3. The open editor: a **name** input and a **type** picker — string, number,
    boolean, date, time, date-time, UUID, or **custom** (which reveals a
    free-text type-name input) — on the first line, with **×** to remove the
