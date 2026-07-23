@@ -1,0 +1,26 @@
+/* The panel's support footer: two muted links under a divider, sitting below
+   whatever tab is open. Reuses the design tokens the sections share. */
+
+.panel-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--em-line);
+  font-size: 11px;
+  color: var(--em-hint);
+}
+
+.panel-footer-link {
+  color: var(--em-muted);
+  text-decoration: none;
+}
+
+.panel-footer-link:hover {
+  text-decoration: underline;
+}
+
+.panel-footer-sep {
+  color: var(--em-hint);
+}

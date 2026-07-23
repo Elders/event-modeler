@@ -7,6 +7,7 @@ import { BuildingBlocksSection } from './BuildingBlocksSection';
 import { ConsoleSection } from './ConsoleSection';
 import { ConvertSection } from './ConvertSection';
 import { GenerateSection } from './GenerateSection';
+import { PanelFooter } from './PanelFooter';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
 import { PatternsSection } from './PatternsSection';
 import { PropertiesSection } from './PropertiesSection';
@@ -32,7 +33,7 @@ export function Panel() {
         onChange={setTab}
         indicators={logs.worst ? { console: logs.worst } : undefined}
       />
-      <div className="tab-panel" role="tabpanel">
+      <div className="tab-panel" role="tabpanel" id="em-tabpanel" aria-labelledby={`em-tab-${tab}`}>
         {tab === 'build' ? (
           <>
             <BuildingBlocksSection busy={busy} guard={guard} />
@@ -47,6 +48,7 @@ export function Panel() {
           <ConsoleSection />
         )}
       </div>
+      <PanelFooter />
     </div>
   );
 }

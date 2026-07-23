@@ -41,6 +41,8 @@ export function PanelTabs({
             key={tab.id}
             type="button"
             role="tab"
+            id={`em-tab-${tab.id}`}
+            aria-controls="em-tabpanel"
             aria-selected={active === tab.id}
             // The dot is decorative, so the fact it conveys goes in the name —
             // colour on a 6px circle is not something to rely on alone.

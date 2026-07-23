@@ -21,6 +21,7 @@ export function ModelPicker({
 }) {
   const [models, setModels] = useState<PlannerModel[]>(plannerModels);
   const [fallbackReason, setFallbackReason] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   // Fetch when a key appears (or on mount if one is already saved). Keyed on
   // `configured`, not the key text: the key field persists per keystroke, and
@@ -28,10 +29,12 @@ export function ModelPicker({
   useEffect(() => {
     if (!configured) return;
     let cancelled = false;
+    setLoading(true);
     void loadPlannerModels().then((load) => {
       if (cancelled) return;
       setModels(load.models);
       setFallbackReason(load.fallbackReason);
+      setLoading(false);
     });
     return () => {
       cancelled = true;
@@ -58,6 +61,7 @@ export function ModelPicker({
             truthfully — a <select> whose value matches no option shows blank. */}
         {value && !models.some((m) => m.id === value) && <option value={value}>{value}</option>}
       </select>
+      {loading && <p className="footnote">Loading the latest models…</p>}
       {fallbackReason && (
         <p className="model-picker-error">
           Couldn't fetch the live model list — {fallbackReason}. Showing the built-in list; details

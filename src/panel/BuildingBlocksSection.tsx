@@ -136,7 +136,12 @@ export function BuildingBlocksSection({ busy, guard }: { busy: boolean; guard: G
                 void place();
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void place();
+                // A role="button" is expected to fire on Space as well as Enter;
+                // preventDefault stops Space from scrolling the panel instead.
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void place();
+                }
               }}
             >
               <Swatch kind={tile.kind} />
