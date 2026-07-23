@@ -149,17 +149,39 @@ commands, events, read models, external events, screens, and automations. Each
 field has a name and a type drawn from a fixed set — string, number, boolean,
 date, time, date-time, UUID — or a free-text **custom** type.
 
-A field may also be marked **optional**, shown as a `?` after its type
-(`email : string?`). Optionality is a claim about the data itself, and the
-completeness check reads it on both sides (§7): an optional field need not be
-supplied by anyone, and supplies nobody.
+A field is displayed — and typed by hand — as **one notation line**, whose
+full form is `from > name : type[]!? = example`. Every part beyond
+`name : type` is optional, and each is a claim of its own:
 
-A colon is **not a valid character in a field name**: it is the name/type
-separator, so the first colon on a line ends the name. It is rejected wherever it
-can be — the panel's name input and the generator's plan normalizer both strip it
-— and on the board it simply reads as the separator (`order:id : uuid` parses as
-the field `order` of custom type `id : uuid`). Type labels are unconstrained,
-since everything past the first colon is already the label.
+- **Optional** (`?` after the type, `email : string?`) — the field may or may
+  not be present at runtime. The completeness check reads it on both sides
+  (§7): an optional field need not be supplied by anyone, and supplies nobody.
+- **Generated** (`!` after the type, `id : UUID!`) — the element synthesizes
+  the value itself at runtime rather than receiving it. Asymmetric in the
+  check (§7): never expected from an incoming link, yet a guaranteed supply to
+  everything downstream.
+- **Collection** (`[]` right after the type, `tags : string[]`) — many of the
+  declared type rather than one. Display only; the check ignores cardinality.
+  The marks compose in the fixed order `type[]!?`, parsed outside-in.
+- **Example** (`= value` at the very end, `name : string = Ada Lovelace`) — a
+  free-text sample of the value: everything past the first `=` after the type,
+  verbatim. Pure documentation — no part in the check, and never included in a
+  flag caption (§7).
+- **Fed by** (`from >` before the name, `full_name > name : string`) — the
+  differently-named upstream field(s) that supply this one, source first, in
+  the direction the data travels. Several alternatives are comma-separated
+  (`full_name, display_name > name`); any one satisfies (§7). Intake-only:
+  the alias widens what satisfies this field and changes nothing about what
+  the element supplies downstream.
+
+The name/type separator (the colon) and the fed-by arrow are therefore **not
+valid characters in a field name**: the first of either on a line ends what
+came before it. Both are rejected wherever a name can enter — the panel's name
+inputs and the generator's plan normalizer strip them — and on the board they
+simply read as separators (`order:id : uuid` parses as the field `order` of
+custom type `id : uuid`). Type labels are unconstrained, since everything past
+the first colon up to the marks is already the label. The example separator
+carries meaning only after the type, so names may contain it.
 
 Fields are displayed two ways, by element kind:
 
@@ -173,9 +195,11 @@ Fields are editable from **both** directions, and the two stay reconciled:
 
 - **On the board** — the user types `name : type` lines directly on a card, or
   in an attached box; the tool parses them back into fields.
-- **In the panel** — a field editor reflects the current selection, offering a
-  name input, a type picker and an optional toggle per field, with add, remove
-  and reorder controls.
+- **In the panel** — a field editor reflects the current selection. At rest it
+  lists each field as the same notation line the canvas renders, so the list
+  teaches the notation the user can then type directly on the element; opening
+  a field offers a name input, a type picker, a toggle per mark, and inputs
+  for the fed-by names and the example, with add, remove and reorder controls.
 
 Board-side edits are authoritative, in both displays: a manual edit on a card
 or in a box is read back into the tool's record and never silently overwritten.
@@ -203,26 +227,44 @@ The rule is evaluated continuously in the background, with no user action.
 
 **The judgement is per target, over its whole fan-in** — not per link.
 Everything pointing into a target pools its fields, and the target is satisfied
-when that pool covers every field the target requires, matched by **name and
-type** (a differing type counts as missing). No single source has to carry the
-whole payload: a read model hydrated by several events is the motivating case,
-each event carrying its own part of the whole. One source supplying a field
-satisfies the target however many others omit it.
+when that pool covers every field the target requires, matched by **name
+alone** — the type is documentation, rendered wherever the field is shown but
+playing no part in the match. A field declaring fed-by aliases (§5) is
+satisfied by any of its declared names — its own or any upstream alternative.
+No single source has to carry the whole payload: a read model hydrated by
+several events is the motivating case, each event carrying its own part of the
+whole. One source supplying a field satisfies the target however many others
+omit it.
 
 **Optionality is read on both sides** (§5). An optional field on the target
 need not be supplied by anyone; an optional field on a source supplies nobody,
 since a field that may be absent cannot guarantee one that must be present.
+**Generated fields are the opposite asymmetry** (§5): excluded from what the
+fan-in must supply — nothing upstream is ever expected to carry one — yet
+counted as a guaranteed supply to everything the element feeds.
+
+**A link that contributes nothing is flagged on its own.** The per-target
+pooling is deliberately loose, so once a target *is* covered, each link into
+it is additionally judged alone: a source supplying none of the target's
+required fields — an optional-only match counts as none — is flagged even
+though the target is fine, so a link that is wired up but carries no data
+cannot hide behind its siblings. Supplying any one relevant field (under any
+declared name) clears it.
 
 When the pool falls short, **every** link into that target is flagged: the
 shortfall belongs to the target's fan-in, not to any one link, and closing it on
 any one source clears them all. A flagged link is reddened and **captioned with
-the shortfall**, listing the missing fields one per line. The two kinds of gap
-are worded differently, because a field visibly present upstream cannot be
-reported as absent:
+the shortfall**, listing the missing fields one per line, each named as the
+target displays it — aliases included, example omitted (a caption reports a
+value nobody carries). The kinds of gap are worded differently, because a
+field visibly present upstream cannot be reported as absent:
 
 - a field nothing upstream carries at all appears as the bare `name : type`;
 - a field the fan-in carries, but only optionally, reads
-  `Field "name : type" is required`.
+  `Field "name : type" is required`;
+- a covered target's zero-contribution link reads
+  `Supplies none of the required fields` — there is no field to name, since
+  the target lacks nothing; the link itself is what is flagged.
 
 The caption replaces whatever the link carried, and the previous text is not
 restored afterwards; the tool writes captions only onto links it has itself

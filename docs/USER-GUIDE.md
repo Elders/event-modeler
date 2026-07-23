@@ -131,29 +131,65 @@ model. Every block except errors and notes can carry them: commands, events,
 read models, external events, screens, and automations.
 
 1. Select a block on the board; the Fields tab shows its type and fields.
-2. **+ Add field** appends a row. Each row is a **name** input, a **type**
-   picker — string, number, boolean, date, time, date-time, UUID, or **custom**
-   (which reveals a free-text type-name input) — and a **?** toggle that marks
-   the field **optional**. **×** removes the row. Pressing **Enter** in a name
-   input inserts a new field directly below that row and moves focus into it,
-   wherever the row sits in the list.
-3. Reorder fields by dragging a row's **⠿ grip** (or focus the grip and use
+2. The list is an **accordion**: every field is one collapsed line showing
+   exactly what the board renders — `full_name > name : string[]? = Ada` —
+   with a dimmer second line for the example when the field has one. Click a
+   line to open its editor (one open at a time); **Escape** or a click on the
+   editor's background closes it. **+ Add field** appends a fresh field and
+   opens it.
+3. The open editor: a **name** input and a **type** picker — string, number,
+   boolean, date, time, date-time, UUID, or **custom** (which reveals a
+   free-text type-name input) — on the first line, with **×** to remove the
+   field. Below them, five toggles in the order the marks render on the board:
+   **`[]`** collection, **`!`** generated, **`?`** optional, **`→`** fed-by
+   (reveals an input for the upstream name(s)), and **`=`** example (reveals
+   an input for the sample value). Pressing **Enter** in a name input inserts
+   a new field directly below that row and moves focus into it, wherever the
+   row sits in the list.
+4. Reorder fields by dragging a row's **⠿ grip** (or focus the grip and use
    the arrow keys); the block on the board redraws in the new order.
-4. Changes save immediately.
+5. Changes save immediately.
 
-**Optional fields.** A field marked optional may or may not be there at
+**Optional fields (`?`).** A field marked optional may or may not be there at
 runtime; a plain field is one the block always carries. Optional shows on the
 board as a **`?` after the type** — `email : string?` — and you can type that
 `?` directly on the block instead of using the toggle. The distinction is not
 just documentation: it changes the completeness check (§5) on both sides.
 
-A field **name cannot contain a colon** — the colon is what separates the name
-from the type, so the first one on a line always ends the name. The panel's name
-box simply won't take one (and the generator won't produce one), but a colon you
-type onto a block yourself is read as the separator: `order:id : uuid` becomes a
-field named `order` of a type called `id : uuid`. Name fields `orderId`, not
-`order:id`. Type names are unaffected — everything after the first colon is the
-type, so a custom type may contain them.
+**Generated fields (`!`).** A generated field is one the block makes itself at
+runtime — a command handler assigning a fresh id, say — rather than receiving
+from an incoming block. It shows as a **`!` right after the type** —
+`id : UUID!`. The completeness check (§5) never expects an incoming arrow to
+supply it, but downstream blocks can count on it like any required field.
+
+**Collections (`[]`).** A collection field carries many of its type rather
+than one: `tags : string[]`. Purely how the field reads — the completeness
+check doesn't care about cardinality. When marks combine, the order is always
+`type[]!?` — `ids : UUID[]!?` in the rare full case.
+
+**Examples (`=`).** A field can carry a sample value, shown at the very end of
+the line: `name : string = Ada Lovelace`. Free text — commas, colons, spaces
+are all fine. Documentation only: the completeness check ignores it and a red
+arrow's caption never includes it. You can type one directly on the block —
+everything after the first `=` following the type is the example.
+
+**Fed by (`→`).** A field supplied by a differently-named upstream field can
+name its source(s): a read model's `name` fed by an event's `full_name`
+renders **`full_name > name : string`** — source first, pointing the way the
+data flows. Comma-separate alternatives (`full_name, display_name > name`)
+when the same datum can arrive under either name; any one of them satisfies
+the field (§5). The alias is intake-only — downstream, the block still
+supplies plain `name`.
+
+A field **name cannot contain a colon or a `>`** — the colon separates the
+name from the type and the `>` separates the upstream names from the field's
+own, so the first of either on a line always ends what came before. The
+panel's name boxes simply won't take them (and the generator won't produce
+them), but ones you type onto a block yourself are read as separators:
+`order:id : uuid` becomes a field named `order` of a type called `id : uuid`.
+Name fields `orderId`, not `order:id`. Type names are unaffected — everything
+after the first colon is the type, so a custom type may contain either. An
+`=` is fine in a name — it only means something after the type.
 
 Where fields appear on the board:
 
@@ -183,13 +219,24 @@ Fields let the app verify that information actually *flows*. Continuously, in
 the background:
 
 > Everything pointing into a block must, **between them**, supply every field
-> that block requires — matched by name **and** type.
+> that block requires — matched by **name alone**.
 
 The check judges a **block and its whole fan-in at once**, not one arrow at a
 time. All the blocks feeding a target pool their fields, and the target is
 satisfied when that pool covers what it requires. No single source has to carry
 the whole payload: a read model hydrated by three events is complete when the
 three events *together* supply its fields, even though no one event does.
+
+**Only the name matters for the match.** Types are documentation: they render
+everywhere a field is shown, but a required `email : string` is satisfied by
+any upstream field named `email`, whatever type either side declares. A field
+with a **fed-by alias** (§4) is satisfied by any of its declared names too —
+`full_name, display_name > name` is covered by a source carrying `full_name`,
+one carrying `display_name`, or one carrying `name` itself.
+
+**Generated fields don't need feeding.** A `!` field (§4) is made by the block
+itself, so incoming arrows are never expected to supply it — but blocks
+downstream can rely on it exactly like any required field.
 
 When the pool falls short, **every** arrow into that block turns **red** — the
 shortfall belongs to the fan-in as a whole, and there's no honest way to pin it
@@ -208,12 +255,24 @@ So `email : string?` on an upstream block does **not** satisfy a required
 as required, or the target's own field is marked optional. One source carrying
 it as required is enough, however many others carry it only optionally.
 
+**An arrow that contributes nothing reddens alone.** Even when the fan-in as a
+whole covers the target, an arrow whose own source supplies **none** of the
+target's required fields (an optional-only match counts as none) turns red by
+itself, captioned *`Supplies none of the required fields`* — a link that's
+wired up but carries no data shouldn't hide behind its siblings. Supplying
+just one relevant field clears it, so a source carrying its own slice of a
+multi-event hydration is never caught.
+
 **A red arrow tells you what's missing.** Each flagged arrow is captioned with
-the shortfall, one missing field per line, in the target's field order:
+the shortfall, one missing field per line, in the target's field order. The
+field is named the way the target displays it — aliases included, example
+omitted:
 
 - `total : number` — nothing feeding the block carries this field at all.
-- `Field "email : string" is required` — the fan-in *does* carry that exact
-  name and type, but only as optional. Drop the `?` upstream.
+- `Field "email : string" is required` — the fan-in *does* carry that name,
+  but only as optional. Drop the `?` upstream.
+- `Supplies none of the required fields` — this arrow's own source carries
+  nothing the target needs (see above); the other arrows may be fine.
 
 Close the gap and the arrow returns to exactly the color it had before, usually
 within a few seconds. Note that the caption **overwrites any text the arrow
@@ -223,9 +282,8 @@ was there. Arrows the check never flagged are never captioned or cleared, so
 text you write on an arrow that stays black is safe.
 
 Notes: a block that requires no fields is never flagged — nor is one whose
-fields are all optional; arrows with a loose (unattached) end are ignored; a
-field with the right name but the wrong type counts as missing. The check runs
-whether or not the panel is open.
+fields are all optional or generated; arrows with a loose (unattached) end are
+ignored. The check runs whether or not the panel is open.
 
 ---
 
@@ -320,6 +378,10 @@ you had placed it by hand.
   *`Field "…" is required`* when an upstream block carries that field but marks
   it optional (`?`). An optional field supplies nobody (§5); drop the `?` on
   the source, or mark the target's field optional too.
+- **One arrow is red while its siblings are black** — its caption reads
+  *`Supplies none of the required fields`*: the target is covered, but this
+  arrow's own source contributes nothing to it (§5). Give the source one of
+  the target's fields, or name it as a fed-by alias on the target.
 - **Something didn't update immediately** — background upkeep (spec re-layout,
   field-box healing, arrow recoloring) runs on a few-seconds cycle. Give it a
   moment before assuming something's wrong.
