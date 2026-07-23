@@ -480,12 +480,30 @@ export function escapeHtml(value: string): string {
 }
 
 function decodeEntities(value: string): string {
+  // Numeric character references come first. Miro's rich-text editor emits
+  // some plain characters this way — notably "=" as "&#61;", which the field
+  // parser needs raw to find an example's "=" separator (without this, a field
+  // typed "name : string = Alex" on the board reads back as a custom type named
+  // "string &#61; Alex") — and our own escapeHtml writes "'" as "&#39;".
+  // Decoded before the named entities (and so before &amp;) so a literally
+  // typed "&#61;" — which escapeHtml wrote as "&amp;#61;" — collapses to the
+  // text "&#61;", not to "=".
+  const withNumeric = value
+    .replace(/&#(\d+);/g, (whole, dec) => codePointToText(parseInt(dec, 10), whole))
+    .replace(/&#x([0-9a-fA-F]+);/gi, (whole, hex) => codePointToText(parseInt(hex, 16), whole));
   // &amp; is decoded last so an escaped "&lt;" never collapses past one level.
-  return value
+  return withNumeric
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&');
+}
+
+// A numeric character reference's code point as text, or the reference left
+// untouched when it's out of Unicode range (String.fromCodePoint would
+// otherwise throw). A malformed entity in a sticky is data, not a crash.
+function codePointToText(code: number, whole: string): string {
+  return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
 }
