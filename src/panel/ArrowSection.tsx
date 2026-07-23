@@ -3,13 +3,19 @@
 // navigate the viewport to either end. Rendered by FieldsSection when the
 // selection is exactly one connector.
 //
+// The layout speaks the panel's own visual language: each direction is a card
+// naming its ends with the vocabulary dots ("● Command → ● Event") over a
+// Copy/Replace pair, and each end is a pattern-row-style button for
+// navigation. No Mirotone .button here except Retry — the stock button sizes
+// itself to its label, which is what made a grid of them ragged.
+//
 // Same failure discipline as the rest of the tab: a board that couldn't be read
 // renders as that failure (with retry), never as "nothing here". Every action
 // re-reads the arrow fresh inside the feature, so these buttons act on what the
 // board holds at click time, not on what this component rendered.
 
 import './ArrowSection.css';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   describeArrow,
   navigateToEndpoint,
@@ -21,6 +27,7 @@ import {
 } from '../features/arrow';
 import { failureReason, reportToLog } from '../features/diagnostics';
 import { isBoardRateLimited } from '../features/hostStatus';
+import { Dot, type DotKind } from './Dot';
 
 // The same slow self-retry as the fields editor: the failure this retries is
 // usually an exhausted credit budget, and a tight loop would spend the very
@@ -31,21 +38,25 @@ function title(endpoint: ArrowEndpoint): string {
   return endpoint.name || endpoint.label;
 }
 
-// One side of the header line: the block label, with its field count when it
-// can carry fields at all.
-function sideText(endpoint: ArrowEndpoint | null): string {
-  if (!endpoint) return 'unattached';
-  return endpoint.fieldable ? `${endpoint.label} (${endpoint.fields.length})` : endpoint.label;
+// The vocabulary dot for an endpoint: the sticky types map straight through;
+// screens and automations reuse the palette's sketch/gear marks; an
+// unrecognized element gets a neutral outline dot (rendered inline below).
+function dotFor(endpoint: ArrowEndpoint): DotKind | null {
+  if (!endpoint.type) return null;
+  if (endpoint.type === 'screen') return 'sketch';
+  if (endpoint.type === 'automation') return 'gear';
+  return endpoint.type;
 }
 
-// A navigate button's target: the block type, plus the block's own name when
-// both ends carry the same label and the type alone can't tell them apart.
-function navText(endpoint: ArrowEndpoint, other: ArrowEndpoint | null): string {
-  const base = endpoint.label.toLowerCase();
-  if (other && other.label === endpoint.label && endpoint.name) {
-    return `${base} “${endpoint.name}”`;
-  }
-  return base;
+function EndBadge({ endpoint }: { endpoint: ArrowEndpoint }) {
+  const dot = dotFor(endpoint);
+  return (
+    <span className="arrow-move-end" title={title(endpoint)}>
+      {dot ? <Dot kind={dot} /> : <span className="dot dot-plain" />}
+      <span className="arrow-move-label">{endpoint.label}</span>
+      {endpoint.fieldable && <span className="arrow-count">{endpoint.fields.length}</span>}
+    </span>
+  );
 }
 
 export function ArrowSection({ connectorId }: { connectorId: string }) {
@@ -55,10 +66,19 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   const [attempt, setAttempt] = useState(0);
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  // Which arrow the shown info belongs to. A re-describe of the SAME arrow (a
+  // retry, the refresh after a transfer) keeps the current card on screen
+  // instead of flashing back to "Reading…"; a different arrow clears it.
+  const shownFor = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoaded(false);
+    if (shownFor.current !== connectorId) {
+      shownFor.current = connectorId;
+      setInfo(null);
+      setStatus(null);
+      setLoaded(false);
+    }
     void describeArrow(connectorId)
       .then((described) => {
         if (cancelled) return;
@@ -137,11 +157,12 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
     );
   }
 
-  if (!loaded) {
+  if (!loaded && !info) {
     return (
       <section className="section">
         <h2 className="section-title">Fields</h2>
-        <p className="section-sub">Reading the arrow…</p>
+        <p className="section-sub">Arrow</p>
+        <p className="arrow-note">Reading the arrow…</p>
       </section>
     );
   }
@@ -150,7 +171,8 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
     return (
       <section className="section">
         <h2 className="section-title">Fields</h2>
-        <p className="section-sub">This arrow no longer exists on the board.</p>
+        <p className="section-sub">Arrow</p>
+        <p className="arrow-note">This arrow no longer exists on the board.</p>
       </section>
     );
   }
@@ -159,35 +181,72 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   const end = info.end;
 
   // Why a transfer that way can't run, or null when it can. Both copy and
-  // replace need the same things: two attached, field-capable ends and at least
-  // one field on the source (replacing with nothing would be a disguised
+  // replace need the same things: two attached, field-capable ends and at
+  // least one field on the source (replacing with nothing would be a disguised
   // clear, and copying nothing is a no-op).
   const blocked = (direction: TransferDirection): string | null => {
     const source = direction === 'along' ? start : end;
     const target = direction === 'along' ? end : start;
     if (!source || !target) return 'This arrow is not attached to a block on both ends.';
-    if (!source.fieldable) return `A ${source.label.toLowerCase()} can't carry fields.`;
-    if (!target.fieldable) return `A ${target.label.toLowerCase()} can't carry fields.`;
+    if (!source.fieldable) return `This ${source.label.toLowerCase()} can't carry fields.`;
+    if (!target.fieldable) return `This ${target.label.toLowerCase()} can't carry fields.`;
     if (source.fields.length === 0) return `${title(source)} has no fields to carry over.`;
     return null;
   };
 
-  const transferButton = (
-    text: string,
-    direction: TransferDirection,
-    mode: TransferMode,
-    describe: string,
-  ) => {
+  // One direction: its ends named with dots, source first, over a Copy/Replace
+  // pair. The card always renders — a blocked direction shows why on hover.
+  const moveCard = (direction: TransferDirection, source: ArrowEndpoint, target: ArrowEndpoint) => {
     const why = blocked(direction);
     return (
+      <div className="arrow-move">
+        <div className="arrow-move-ends">
+          <EndBadge endpoint={source} />
+          <span className="arrow-move-arrow" aria-hidden="true">
+            →
+          </span>
+          <EndBadge endpoint={target} />
+        </div>
+        <div className="arrow-move-actions">
+          <button
+            className="arrow-action"
+            type="button"
+            disabled={working || why !== null}
+            title={why ?? `Add ${title(source)}'s fields to ${title(target)} — existing fields are kept`}
+            onClick={() => transfer(direction, 'copy')}
+          >
+            Copy
+          </button>
+          <button
+            className="arrow-action"
+            type="button"
+            disabled={working || why !== null}
+            title={why ?? `Replace ${title(target)}'s fields with ${title(source)}'s`}
+            onClick={() => transfer(direction, 'replace')}
+          >
+            Replace
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const navRow = (endpoint: ArrowEndpoint) => {
+    const dot = dotFor(endpoint);
+    return (
       <button
-        className="button button-small"
+        className="arrow-nav-row"
         type="button"
-        disabled={working || why !== null}
-        title={why ?? describe}
-        onClick={() => transfer(direction, mode)}
+        disabled={working}
+        title={`Navigate to ${title(endpoint)}`}
+        onClick={() => navigate(endpoint)}
       >
-        {text}
+        {dot ? <Dot kind={dot} /> : <span className="dot dot-plain" />}
+        <span className="arrow-nav-label">{endpoint.label}</span>
+        {endpoint.name && <span className="arrow-nav-name">{endpoint.name}</span>}
+        <span className="arrow-nav-go" aria-hidden="true">
+          ↗
+        </span>
       </button>
     );
   };
@@ -195,61 +254,29 @@ export function ArrowSection({ connectorId }: { connectorId: string }) {
   return (
     <section className="section">
       <h2 className="section-title">Fields</h2>
-      <p className="section-sub arrow-ends" title={[start, end].map((e) => (e ? title(e) : 'unattached')).join(' → ')}>
-        Arrow — {sideText(start)} → {sideText(end)}
-      </p>
+      <p className="section-sub">Arrow</p>
 
-      <div className="arrow-transfer">
-        {transferButton(
-          'Copy →',
-          'along',
-          'copy',
-          `Add the ${start?.label.toLowerCase() ?? 'source'}'s fields to the ${end?.label.toLowerCase() ?? 'target'}`,
-        )}
-        {transferButton(
-          'Copy ←',
-          'against',
-          'copy',
-          `Add the ${end?.label.toLowerCase() ?? 'source'}'s fields to the ${start?.label.toLowerCase() ?? 'target'}`,
-        )}
-        {transferButton(
-          'Replace →',
-          'along',
-          'replace',
-          `Replace the ${end?.label.toLowerCase() ?? 'target'}'s fields with the ${start?.label.toLowerCase() ?? 'source'}'s`,
-        )}
-        {transferButton(
-          'Replace ←',
-          'against',
-          'replace',
-          `Replace the ${start?.label.toLowerCase() ?? 'target'}'s fields with the ${end?.label.toLowerCase() ?? 'source'}'s`,
-        )}
-      </div>
+      {start && end ? (
+        <>
+          <p className="arrow-heading">Move fields</p>
+          {moveCard('along', start, end)}
+          {moveCard('against', end, start)}
+        </>
+      ) : (
+        <p className="arrow-note">
+          Attach both ends of the arrow to blocks to move fields between them.
+        </p>
+      )}
 
-      <div className="arrow-nav">
-        {start && (
-          <button
-            className="button button-small w-full"
-            type="button"
-            disabled={working}
-            title={title(start)}
-            onClick={() => navigate(start)}
-          >
-            Navigate to {navText(start, end)}
-          </button>
-        )}
-        {end && (
-          <button
-            className="button button-small w-full"
-            type="button"
-            disabled={working}
-            title={title(end)}
-            onClick={() => navigate(end)}
-          >
-            Navigate to {navText(end, start)}
-          </button>
-        )}
-      </div>
+      {(start || end) && (
+        <>
+          <p className="arrow-heading">Navigate to</p>
+          <div className="arrow-nav">
+            {start && navRow(start)}
+            {end && navRow(end)}
+          </div>
+        </>
+      )}
 
       {status && <p className="arrow-status">{status}</p>}
       <p className="footnote">Copy adds the missing fields; Replace overwrites them all.</p>

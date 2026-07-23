@@ -231,10 +231,10 @@ export async function transferFields(
     return { applied: false, message: "This arrow isn't attached to a block on both ends." };
   }
   if (!source.fieldable) {
-    return { applied: false, message: `A ${source.label.toLowerCase()} can't carry fields.` };
+    return { applied: false, message: `This ${source.label.toLowerCase()} can't carry fields.` };
   }
   if (!target.fieldable || !target.type) {
-    return { applied: false, message: `A ${target.label.toLowerCase()} can't carry fields.` };
+    return { applied: false, message: `This ${target.label.toLowerCase()} can't carry fields.` };
   }
   const incoming = projectForTransfer(source.fields);
   if (incoming.length === 0) {

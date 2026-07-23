@@ -1,22 +1,163 @@
-/* The arrow toolset: the 2x2 transfer grid, the per-end navigate buttons, and
-   the outcome line. The failure state mirrors the fields editor's on purpose —
-   the two tabs' failure screens should read as the same thing. */
+/* The arrow toolset, in the panel's row-and-dot language: one tinted card per
+   direction (its ends named with vocabulary dots over a Copy/Replace pair),
+   and a pattern-row-style button per end for navigation. Buttons are sized by
+   layout (flex), never by their label — Mirotone's .button hugs its text,
+   which is what made a grid of them ragged. The failure state mirrors the
+   fields editor's on purpose — the two failure screens should read as the
+   same thing. */
 
-.arrow-ends {
-  overflow-wrap: anywhere;
+.arrow-heading {
+  margin: 12px 0 6px;
+  font-size: 11px;
+  color: var(--em-hint);
 }
 
-.arrow-transfer {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+.arrow-heading:first-of-type {
+  margin-top: 0;
+}
+
+.arrow-note {
+  margin: 2px 0 8px;
+  font-size: 11px;
+  color: var(--em-muted);
+}
+
+/* One direction: the tint groups the label line with its buttons; the white,
+   bordered look stays reserved for things that are themselves clickable. */
+.arrow-move {
+  padding: 8px 10px 10px;
   margin-bottom: 8px;
+  border-radius: 8px;
+  background: #f6f6fa;
+}
+
+.arrow-move-ends {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* long labels ("External event → Read model") break cleanly */
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.arrow-move-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.arrow-move-end .dot,
+.arrow-nav-row .dot {
+  flex: none;
+}
+
+/* A neutral outline dot for an end the model doesn't recognize. */
+.dot-plain {
+  background: #fff;
+  border: 1px solid var(--em-tile-border);
+  box-sizing: border-box;
+}
+
+.arrow-move-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--em-ink);
+}
+
+.arrow-count {
+  padding: 0 5px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 8px;
+  background: #fff;
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--em-muted);
+}
+
+.arrow-move-arrow {
+  font-size: 12px;
+  color: var(--em-hint);
+}
+
+.arrow-move-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.arrow-action {
+  flex: 1; /* equal widths by layout, whatever the label */
+  padding: 6px 0;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--em-ink);
+  cursor: pointer;
+}
+
+.arrow-action:hover:enabled {
+  border-color: #b6b6c8;
+}
+
+.arrow-action:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .arrow-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+
+/* Modeled on .pattern-row: a white bordered row is the panel's "click me". */
+.arrow-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--em-tile-border);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.arrow-nav-row:hover:enabled {
+  border-color: #b6b6c8;
+}
+
+.arrow-nav-row:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.arrow-nav-label {
+  flex: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--em-ink);
+}
+
+.arrow-nav-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--em-muted);
+}
+
+.arrow-nav-go {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4262ff;
 }
 
 .arrow-status {
