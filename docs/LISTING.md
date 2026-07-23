@@ -10,6 +10,20 @@ what's actually entered in the Partner submission form.
 Do **not** use "Miro Event Modeler" — leading with "Miro" implies Miro built the
 app, which the design guidelines forbid.
 
+## App logo / icon
+
+Miro requires **SVG** for both icon slots (not PNG). The two files already exist
+in [`branding/`](../branding/) and conform to Miro's rules (SVG, ≤ 5000 bytes,
+square, monochrome = one color, no gradients):
+
+| File | Slot | Notes |
+| --- | --- | --- |
+| [`branding/icon-stack-mono.svg`](../branding/icon-stack-mono.svg) | Outline / monochrome icon (app toolbar) | Single color `#000000`; Miro auto-converts monochrome icons to indigo on upload. |
+| [`branding/icon-stack-color.svg`](../branding/icon-stack-color.svg) | Full-color icon | Also serves as the **Marketplace logo**. |
+
+Upload both under the app settings' **Display information** section. No raster
+export is needed.
+
 ## Description (423 / 450 characters)
 
 > Bring event modeling to your Miro board. Drag typed blocks — events, commands,
