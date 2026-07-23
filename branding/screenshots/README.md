@@ -14,3 +14,8 @@ Requirements for every file: **PNG**, ≤ 8 MB, **≤ 1258×706**, full-bleed (n
 rounded corners or padding), **tinted (non-white) background**. (The top Miro
 logo/Upgrade bar is cropped from all; #1 keeps the app panel + left toolbar on
 purpose.)
+
+**Re-capture these whenever the panel UI changes** — they're hand-captured, not
+generated, and are public on the Marketplace once submitted, so a stale UI here
+is visible to everyone. The README tour in [`docs/images/`](../../docs/images/)
+tracks the same UI and drifts the same way.
