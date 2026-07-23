@@ -1,63 +1,59 @@
 # Miro Event Modeler
 
-A [Miro](https://miro.com) app for [event modeling](https://eventmodeling.org), built on the
-**Web SDK v2** with **React + TypeScript**. The toolbar icon opens a panel split
-into four tabs — **Build** (the manual modeling palette), **Properties** (the
-per-selection name and field editor), **Generate** (AI), and **Console** (the
-failure log and credit meter):
+A [Miro](https://miro.com) app for [event modeling](https://eventmodeling.org),
+built on the **Web SDK v2** with **React + TypeScript**. The toolbar icon opens a
+four-tab panel; everything it places is a native, editable Miro widget. See the
+[user guide](docs/USER-GUIDE.md) for the full walkthrough.
 
-- **Generate from text** *(Generate tab)* — paste a description of a system or workflow and an AI
-  agent (Claude) drafts a whole model: typed blocks laid out in the three lanes,
-  connectors, grouped into slices, with Given/When/Then specifications. Enter
-  your own Anthropic API key in the section's **Settings** (stored only in this
-  browser's `localStorage`, never on the board) and pick a model. Everything it
-  places is a normal, editable Miro widget — rearrange or delete as you like.
-- **Building blocks** — drag (or click) to place: **Event** (orange sticky),
-  **Command** (blue sticky), **Read model** (yellow-green sticky),
-  **External event** (yellow sticky), **Automation** (a double-gear icon image
-  with an editable, grouped title so automations can be named — not a sticky),
-  **Screen** (a grouped pair: title text + image), and **Slice** (a titled Miro
-  frame holding one atomic feature from vertical-slice architecture — items
-  placed inside move with it; rename it via its title; the **+** button at its
-  bottom edge adds a specification beneath it). Screens are deliberately not
-  frames — connectors can't attach to frames, and screens must be linkable
-  into flows. The palette also includes three tool tiles — **Specification**
-  (a Given/When/Then frame, below), **Swimlane** (a single transparent lane
-  guide; stack several for the conventional Screens / Commands & read models /
-  Events rows), and **Chapter** (a thick horizontal arrow with an editable,
-  grouped title above it, marking a phase of the timeline) — drag or click them
-  like any block. To paste a screenshot onto a sketch screen, click the board
-  first
-  (so the canvas has focus), then Ctrl+V.
-- **Pattern stamps** — one-click pre-linked slices for the four event-modeling
-  patterns: command, view, automation, translation. Further linking is done
-  manually with Miro's own connector tool.
-- **Specification** *(Build tab tile)* — a Given/When/Then frame (labels only, so dragging
-  anywhere moves the whole spec). Select a slice first and the spec stacks
-  beneath it — below any specs already there — titled after the slice;
-  otherwise it is standalone. Each zone has a **+** button on the board: click
-  it, then select stickies on the model — linked shallow copies are placed in
-  that zone, which grows (together with the frame) as copies are added, and
-  editing the original updates its copies (one-way, polled every few seconds
-  by the app's invisible board script, so it keeps working while the panel is
-  closed; links live in board app data). Each copy carries
-  Miro's native item link back to its original — the link badge marks it as a
-  copy, and clicking it jumps to the source. The red **Error** sticky
-  expresses a failing Then. Resizing a spec re-grids its copies to the new
-  width automatically (detected by the same poll, once the width settles).
-- **Properties** *(Properties tab)* — select a block, frame, or connector to
-  rename it in place, and give data-bearing blocks named, typed **fields**
-  (rendered in a sticky's own text, or an attached box beneath a screen or
-  automation). A background completeness check reddens every arrow into a block
-  whose incoming blocks don't supply all its required fields, captioning the
-  shortfall. Select a single attached connector and the tab becomes the **arrow
-  toolset** — copy or replace fields across the link, or jump to either end.
-- **Console** *(Console tab)* — a running log of any failure the app hit (it
-  keeps recording while the panel is closed), alongside a meter of the Miro API
-  credits this app has spent over the last minute and hour.
+## The panel
 
-Everything the app creates is a native Miro widget (sticky notes use Miro's own
-color palette) tagged with app metadata (`em: { type }`) for future tooling.
+**Build** — the modeling palette. Drag a tile onto the board, or click to place
+it at the center of the view. The colored tiles are the typed blocks (**Event**,
+**Command**, **Read model**, **External event**, **Error**, **Note**,
+**Automation**, **Screen**) — a sticky's fill color denotes its type. Below them
+are the tool tiles — **Slice** (a frame holding one atomic feature),
+**Specification** (a Given/When/Then frame whose **+** buttons pull in linked
+copies of blocks from the model), **Swimlane**, and **Chapter** — plus the
+one-click **pattern stamps** and the **Convert** tools. Blocks are linked with
+Miro's own connector tool.
+
+![Build tab — the building-blocks palette](docs/images/panel-build.png)
+
+**Properties** — rename the selected block and give data-bearing blocks named,
+typed **fields** (shown in a sticky's own text, or an attached box beneath a
+screen or automation). Each field is one board-notation line; the toggles build
+up the notation — `[]` (collection), `!` (generated), `?` (optional), `→` (fed by
+an upstream field, an alias), and `=` (an example). Here an `Event`'s `name` is
+aliased from an upstream `full_name`, with the example `Alex`.
+
+![Properties tab — the field editor](docs/images/panel-properties.png)
+
+Select a single attached connector and the same tab becomes the **arrow
+toolset** — **Copy** merges fields across the link, **Replace** overwrites them,
+and **Navigate to** pans the viewport to either end.
+
+![Arrow toolset — copy or replace fields across a connector](docs/images/panel-arrow.png)
+
+**Generate** — paste a description of a system or workflow and Claude drafts a
+whole model: typed blocks in three lanes, connectors, slices, and Given/When/Then
+specifications. Your Anthropic API key is stored only in this browser (never on
+the board); pick a model and, if you want, edit the system-prompt preamble.
+
+![Generate tab — draft a model from pasted text](docs/images/panel-generate.png)
+
+**Console** *(not pictured)* — a running log of any failure the app hit (it keeps
+recording while the panel is closed), plus a meter of the Miro API credits spent
+over the last minute and hour.
+
+### The completeness check
+
+A background pass reddens every arrow into a block whose incoming blocks don't
+supply all its required fields, captioning the arrow with the shortfall. Below,
+the `Register user` command doesn't supply the `timestamp` that `User registered`
+requires, so the arrow is red and labelled `timestamp : datetime` (the generated
+`id : UUID!` is exempt — nothing upstream needs to provide it).
+
+![A reddened arrow captioned with the missing field](docs/images/completeness.png)
 
 ## How a Miro app works
 
