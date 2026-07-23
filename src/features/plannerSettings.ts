@@ -9,6 +9,11 @@ export function plannerModels(): PlannerModel[] {
   return requirePlanner().models();
 }
 
+// The built-in preamble the settings editor starts from and resets to.
+export function plannerDefaultPreamble(): string {
+  return requirePlanner().defaultPreamble();
+}
+
 // Both throw if the settings store can't be reached; the panel is the only
 // caller and has somewhere to say so. See ports/planner for why there is no
 // separate "is it configured?" read.

@@ -18,6 +18,10 @@ export interface PlannerModel {
 export interface PlannerSettings {
   apiKey: string;
   model: string;
+  // The system prompt handed to the planner (the "preamble"). Editable so a
+  // user can retune how models are drafted; blank is never stored — a read
+  // falls back to `defaultPreamble()` so the planner always has instructions.
+  preamble: string;
 }
 
 export interface Planner {
@@ -29,6 +33,12 @@ export interface Planner {
   // The built-in model list — what the picker offers before a live list could
   // be fetched (no key configured yet, or the fetch failed).
   models(): PlannerModel[];
+
+  // The built-in preamble (system prompt) — the default a fresh install uses
+  // and the value the panel's "reset to default" restores. Like `models()`,
+  // it's the adapter's own baked-in copy, exposed so the panel can show and
+  // restore it without reaching into the adapter.
+  defaultPreamble(): string;
 
   // The models the configured key can actually use, asked of the provider.
   // Throws with a user-facing message when no key is configured or the

@@ -12,13 +12,14 @@
 
 import type { PlannerSettings } from '../../ports/planner';
 import { DEFAULT_MODEL } from './models';
+import { SYSTEM_PROMPT } from './prompt';
 
 const KEY = 'em.planner';
 
 export function readSettings(): PlannerSettings {
   const raw = localStorage.getItem(KEY);
   // Never configured. A real answer, not a guess.
-  if (!raw) return { apiKey: '', model: DEFAULT_MODEL };
+  if (!raw) return { apiKey: '', model: DEFAULT_MODEL, preamble: SYSTEM_PROMPT };
   // Unreadable stored data throws rather than resetting to the defaults: the
   // caller can offer to re-enter the key, which silently pretending it was never
   // there cannot.
@@ -26,6 +27,13 @@ export function readSettings(): PlannerSettings {
   return {
     apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : '',
     model: typeof parsed.model === 'string' && parsed.model ? parsed.model : DEFAULT_MODEL,
+    // A blank or absent preamble means "use the built-in" — the planner can't
+    // run on an empty system prompt, so a customised value is stored but an
+    // emptied one falls back rather than persisting a broken state.
+    preamble:
+      typeof parsed.preamble === 'string' && parsed.preamble.trim()
+        ? parsed.preamble
+        : SYSTEM_PROMPT,
   };
 }
 

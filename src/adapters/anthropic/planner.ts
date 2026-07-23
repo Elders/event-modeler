@@ -26,6 +26,10 @@ export class AnthropicPlanner implements Planner {
     return PLANNER_MODELS;
   }
 
+  defaultPreamble(): string {
+    return SYSTEM_PROMPT;
+  }
+
   async fetchModels(): Promise<PlannerModel[]> {
     const apiKey = readSettings().apiKey.trim();
     if (!apiKey) {
@@ -60,7 +64,7 @@ export class AnthropicPlanner implements Planner {
     const trimmed = text.trim();
     if (!trimmed) throw new Error('Paste some text to model first.');
 
-    const { apiKey, model } = readSettings();
+    const { apiKey, model, preamble } = readSettings();
     if (!apiKey.trim()) {
       throw new Error('Add your Anthropic API key in the panel settings first.');
     }
@@ -73,7 +77,9 @@ export class AnthropicPlanner implements Planner {
         {
           model,
           max_tokens: 16000,
-          system: SYSTEM_PROMPT,
+          // The user's preamble; `readSettings` guarantees it's non-empty
+          // (a blank one falls back to SYSTEM_PROMPT).
+          system: preamble,
           messages: [{ role: 'user', content: trimmed }],
           output_config: { format: { type: 'json_schema', schema: PLAN_SCHEMA } },
           ...(this.supportsAdaptive(model) ? { thinking: { type: 'adaptive' as const } } : {}),

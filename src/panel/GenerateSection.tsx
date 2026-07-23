@@ -3,7 +3,8 @@
 // a paused build (interrupted by Pause, a reload, or a failure) is persisted on
 // the board, so a banner offers Resume/Discard until it's finished. A
 // collapsible settings block holds the Anthropic API key (stored per-browser,
-// never on the board) and the model picker.
+// never on the board), the model picker, and the editable preamble (the system
+// prompt sent to Claude).
 
 import './GenerateSection.css';
 import { useEffect, useRef, useState } from 'react';
@@ -14,11 +15,13 @@ import { clearCheckpoint, loadCheckpoint } from '../features/generateCheckpoint'
 import {
   getPlannerSettings,
   isPlannerConfigured,
+  plannerDefaultPreamble,
   plannerModels,
   savePlannerSettings,
 } from '../features/plannerSettings';
 import type { PlannerSettings } from '../ports/planner';
 import { ModelPicker } from './ModelPicker';
+import { PreambleEditor } from './PreambleEditor';
 import type { Guard } from './useBusyGuard';
 
 function resumeLabel(checkpoint: GenerationCheckpoint): string {
@@ -57,6 +60,7 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
   const stored = load.ok ? load.settings : null;
   const [apiKey, setApiKey] = useState(stored?.apiKey ?? '');
   const [model, setModel] = useState(stored?.model ?? models[0]?.id ?? '');
+  const [preamble, setPreamble] = useState(stored?.preamble ?? plannerDefaultPreamble());
   const [configured, setConfigured] = useState(!!stored && isPlannerConfigured(stored));
   // Open the settings when there's nothing usable in there — including when the
   // read failed, since re-entering the key is how the user gets out of that.
@@ -75,10 +79,10 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
   const refreshCheckpoint = () => void loadCheckpoint().then(setCheckpoint);
   useEffect(refreshCheckpoint, []);
 
-  const persist = (nextKey: string, nextModel: string) => {
+  const persist = (next: PlannerSettings) => {
     try {
-      savePlannerSettings({ apiKey: nextKey, model: nextModel });
-      setConfigured(nextKey.trim().length > 0);
+      savePlannerSettings(next);
+      setConfigured(next.apiKey.trim().length > 0);
       setSaveError(null);
     } catch (error) {
       // `configured` is deliberately left alone: the planner re-reads the store
@@ -168,8 +172,17 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
         <p className="footnote">Add your Anthropic API key in settings below to enable this.</p>
       )}
 
-      <details className="generate-settings" open={settingsOpen}>
-        <summary onClick={() => setSettingsOpen((v) => !v)}>Settings</summary>
+      {/* Sync state from the native toggle (fires after the open state has
+          already flipped), not from a summary onClick. React 19 flushes a
+          click-handler state update synchronously and rewrites `open` before
+          the browser's own default toggle runs, so the two cancel out and the
+          first click appears to do nothing. onToggle just reflects reality. */}
+      <details
+        className="generate-settings"
+        open={settingsOpen}
+        onToggle={(e) => setSettingsOpen(e.currentTarget.open)}
+      >
+        <summary>Settings</summary>
 
         {/* The read failed. Say that — an empty key field on its own reads as
             "you never set one", and the user would go looking for a key they
@@ -198,22 +211,33 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
           value={apiKey}
           onChange={(e) => {
             setApiKey(e.target.value);
-            persist(e.target.value, model);
+            persist({ apiKey: e.target.value, model, preamble });
           }}
         />
+        <p className="footnote">
+          Stored only in this browser, never on the board. Get a key at{' '}
+          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">
+            console.anthropic.com
+          </a>
+          .
+        </p>
 
         <ModelPicker
           value={model}
           configured={configured}
           onChange={(next) => {
             setModel(next);
-            persist(apiKey, next);
+            persist({ apiKey, model: next, preamble });
           }}
         />
 
-        <p className="footnote">
-          Stored only in this browser, never on the board. Get a key at console.anthropic.com.
-        </p>
+        <PreambleEditor
+          value={preamble}
+          onChange={(next) => {
+            setPreamble(next);
+            persist({ apiKey, model, preamble: next });
+          }}
+        />
       </details>
     </section>
   );
