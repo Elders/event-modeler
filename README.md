@@ -2,7 +2,9 @@
 
 A [Miro](https://miro.com) app for [event modeling](https://eventmodeling.org), built on the
 **Web SDK v2** with **React + TypeScript**. The toolbar icon opens a panel split
-into two tabs — **Build** (the manual modeling palette) and **Generate** (AI):
+into four tabs — **Build** (the manual modeling palette), **Properties** (the
+per-selection name and field editor), **Generate** (AI), and **Console** (the
+failure log and credit meter):
 
 - **Generate from text** *(Generate tab)* — paste a description of a system or workflow and an AI
   agent (Claude) drafts a whole model: typed blocks laid out in the three lanes,
@@ -43,6 +45,16 @@ into two tabs — **Build** (the manual modeling palette) and **Generate** (AI):
   copy, and clicking it jumps to the source. The red **Error** sticky
   expresses a failing Then. Resizing a spec re-grids its copies to the new
   width automatically (detected by the same poll, once the width settles).
+- **Properties** *(Properties tab)* — select a block, frame, or connector to
+  rename it in place, and give data-bearing blocks named, typed **fields**
+  (rendered in a sticky's own text, or an attached box beneath a screen or
+  automation). A background completeness check reddens every arrow into a block
+  whose incoming blocks don't supply all its required fields, captioning the
+  shortfall. Select a single attached connector and the tab becomes the **arrow
+  toolset** — copy or replace fields across the link, or jump to either end.
+- **Console** *(Console tab)* — a running log of any failure the app hit (it
+  keeps recording while the panel is closed), alongside a meter of the Miro API
+  credits this app has spent over the last minute and hour.
 
 Everything the app creates is a native Miro widget (sticky notes use Miro's own
 color palette) tagged with app metadata (`em: { type }`) for future tooling.
@@ -51,19 +63,25 @@ color palette) tagged with app metadata (`em: { type }`) for future tooling.
 
 A Miro app is a small web app that Miro loads inside a board:
 
-| File             | Role                                                                            |
-| ---------------- | ------------------------------------------------------------------------------- |
-| `index.html`     | The **App URL**. Loads on the board (invisibly) and registers the toolbar icon. |
-| `src/index.ts`   | Headless board script: toolbar icon, housekeeping loop, + button flow.          |
-| `app.html`       | Hosts the **React panel** — React mounts into its `#root` element.              |
-| `src/app.tsx`    | Panel entry point; the UI lives in `src/panel/*` section components.            |
-| `src/blocks.ts`  | The event-modeling vocabulary: block types, labels, sticky colors.              |
-| `src/miro/*`     | Shared SDK plumbing: helpers, app-data registries, shared icons.                |
-| `src/features/*` | One module per board feature (stickies, screens, slices, specs/, …).            |
-| `vite.config.ts` | React plugin, dev server on port 3000, both HTML pages as build inputs.         |
-| `tsconfig.json`  | TypeScript config (strict, `react-jsx`, Miro SDK global types).                 |
+| File              | Role                                                                                                     |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `index.html`      | The **App URL**. Loads on the board (invisibly) and registers the toolbar icon.                          |
+| `app.html`        | Hosts the **React panel** — React mounts into its `#root` element.                                       |
+| `src/index.ts`    | Headless board-script composition root: wires the Miro adapters, the icon-click and selection flows, and the background housekeeping passes. |
+| `src/app.tsx`     | Panel composition root: wires the adapters (incl. the Anthropic planner) and mounts the React panel.     |
+| `src/domain/*`    | Pure, platform-free event-modeling logic (vocabulary, fields, specs, completeness, the generator plan, …) — never touches `miro`. |
+| `src/ports/*`     | The interfaces the use-cases speak to (`Canvas`, store, notifier, viewport, planner, …).                 |
+| `src/services.ts` | The service locator — the one seam where a feature obtains its ports.                                     |
+| `src/features/*`  | The use-cases, one module per feature (stickies, screens, slices, specs, fields, generate, …) — talk only to ports. |
+| `src/adapters/*`  | The only place platform SDKs appear: `miro/` (Web SDK), `anthropic/` (the AI planner, panel-only), `browser/` (diagnostics + credit meter). |
+| `src/panel/*`     | React components: the four-tab `Panel` and its section components, each with co-located CSS.             |
+| `vite.config.ts`  | React plugin, dev server on port 3000, both HTML pages as build inputs.                                  |
+| `tsconfig.json`   | TypeScript config (strict, `react-jsx`, Miro SDK global types).                                          |
 
-The `miro` global object is typed by [`@mirohq/websdk-types`](https://www.npmjs.com/package/@mirohq/websdk-types),
+The `src/` tree is a **hexagonal (ports-and-adapters)** architecture: the domain
+and features never import `miro`, so the event-modeling logic can be lifted onto
+another canvas by swapping the adapter set. The `miro` global itself is typed by
+[`@mirohq/websdk-types`](https://www.npmjs.com/package/@mirohq/websdk-types),
 wired in via the `types` field of `tsconfig.json` — no import needed.
 
 ## Prerequisites
