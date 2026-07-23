@@ -10,12 +10,16 @@ import { FieldsSection } from './FieldsSection';
 import { GenerateSection } from './GenerateSection';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
 import { PatternsSection } from './PatternsSection';
+import { useAutoFieldsTab } from './useAutoFieldsTab';
 import { useBusyGuard } from './useBusyGuard';
 import { useLogSummary } from './useLogSummary';
 
 export function Panel() {
   const { busy, guard } = useBusyGuard();
   const [tab, setTab] = useState<PanelTabId>('build');
+  // Selecting a field-bearing block or a single arrow on the board brings the
+  // Fields tab forward on its own.
+  useAutoFieldsTab(tab, setTab);
   // Mark the Console tab whenever anything has been recorded. The failures it
   // collects happen on the board page with the panel shut, so without this the
   // tab is only ever opened by someone who already suspects something.
