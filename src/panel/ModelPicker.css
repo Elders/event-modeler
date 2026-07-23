@@ -1,0 +1,15 @@
+/* The Generate settings' model picker. Only the fetch-failure note lives here;
+   the label and select reuse the shared .generate-* field styles. */
+
+/* Styled as an error, not a hint: the list on screen is the fallback, and the
+   note is what keeps that from passing as the live answer. */
+.model-picker-error {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--em-error);
+  border-radius: 3px;
+  background: #fdf2f2;
+  font-size: 11px;
+  color: var(--em-muted);
+  overflow-wrap: anywhere;
+}

@@ -1199,6 +1199,48 @@ resize it is everyday board work — yanking the panel over on each such click
 would turn the shortcut into a nuisance. Selecting a chapter does jump (it
 rides the existing single-connector trigger).
 
+## The model picker asks the API (2026-07-23)
+
+The Generate tab's model list was a hardcoded trio that aged with every
+Anthropic release. It now fetches the live list from the Models API
+(`GET /v1/models` via the SDK — free, no tokens, same browser client the plan
+call uses) once an API key is configured. Decisions:
+
+**Filtered to structured-outputs support, excluding only an explicit "no".**
+The planner constrains the response with a JSON schema, so a model that can't
+do structured outputs would fail at generate time — better it never appears.
+But a model whose capability data is missing (`capabilities: null`) is
+*unknown*, not unsupported, and stays in: an over-eager filter could empty the
+picker, and an empty picker is a worse lie than an occasional generate-time
+error.
+
+**The built-in trio stays as the labeled fallback.** It's what the picker
+shows before a key exists and after a fetch fails. A failed fetch is never
+passed off as the live answer: the reason renders under the picker
+(`ModelPicker`) and the failure is logged to the Console
+(`features/plannerModels` — the load is total, reporting instead of
+throwing, so the picker always has a list). An *empty* live list — a real
+answer — also falls back, with its own wording, because a picker with no
+options helps nobody.
+
+**Adaptive thinking is decided by the fetched capability answer.** The old
+`supportsAdaptiveThinking` id heuristic (`claude-opus-4*` or Sonnet 4.6) was
+written for the static trio; the live list can offer models it mispredicts —
+Opus 4.5/4.1 match the prefix but reject `thinking: adaptive` with a 400. The
+fetch records each model's `thinking.types.adaptive.supported` and `plan`
+consults that first, falling back to the heuristic only when no fetch has
+succeeded this page load (e.g. reload + fetch failure, where the saved model
+may predate the heuristic — the resulting API error is surfaced, not
+silent).
+
+**One fetch per key per page load.** Cached on the planner instance (with
+in-flight dedup for StrictMode's double effects); a failure un-caches itself
+so the next panel open retries. The picker refetches on the *configured*
+transition, not on key text — the key field persists per keystroke, and a
+fetch per keystroke would hammer the API. A saved model absent from the
+fetched list is appended as an extra option rather than letting the `<select>`
+render blank over a real stored value.
+
 ## Workflow conventions
 
 - **master is the production branch.** Every push to master builds and

@@ -26,8 +26,15 @@ export interface Planner {
   // cancels the in-flight request (the generation feature aborts it on Stop).
   plan(text: string, signal?: AbortSignal): Promise<ModelPlan>;
 
-  // The models the user may choose between.
+  // The built-in model list — what the picker offers before a live list could
+  // be fetched (no key configured yet, or the fetch failed).
   models(): PlannerModel[];
+
+  // The models the configured key can actually use, asked of the provider.
+  // Throws with a user-facing message when no key is configured or the
+  // provider can't be reached — the caller decides what a failure falls back
+  // to, and must say so when it does.
+  fetchModels(): Promise<PlannerModel[]>;
 
   // Current configuration, and a way to persist a change to it. Both THROW if
   // the store can't be reached: an empty key means the user hasn't set one, and

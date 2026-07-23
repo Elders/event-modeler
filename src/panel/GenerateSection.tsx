@@ -18,6 +18,7 @@ import {
   savePlannerSettings,
 } from '../features/plannerSettings';
 import type { PlannerSettings } from '../ports/planner';
+import { ModelPicker } from './ModelPicker';
 import type { Guard } from './useBusyGuard';
 
 function resumeLabel(checkpoint: GenerationCheckpoint): string {
@@ -201,24 +202,14 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
           }}
         />
 
-        <label className="generate-label" htmlFor="planner-model">
-          Model
-        </label>
-        <select
-          id="planner-model"
-          className="generate-field"
+        <ModelPicker
           value={model}
-          onChange={(e) => {
-            setModel(e.target.value);
-            persist(apiKey, e.target.value);
+          configured={configured}
+          onChange={(next) => {
+            setModel(next);
+            persist(apiKey, next);
           }}
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-            </option>
-          ))}
-        </select>
+        />
 
         <p className="footnote">
           Stored only in this browser, never on the board. Get a key at console.anthropic.com.
