@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GenerationCheckpoint } from '../domain/plan';
 import { resumeGeneration } from '../features/generate';
 import { clearCheckpoint, loadCheckpoint } from '../features/generateCheckpoint';
+import { reportError } from '../features/helpers';
 import type { Guard } from './useBusyGuard';
 
 export function useGeneration(guard: Guard) {
@@ -41,7 +42,10 @@ export function useGeneration(guard: Guard) {
 
   const onResume = run((signal) => resumeGeneration(signal));
   const onPause = () => controllerRef.current?.abort();
-  const onDiscard = () => void clearCheckpoint().then(refreshCheckpoint);
+  // Report a failed discard rather than swallow it: when the board is over its
+  // app-data budget, Miro refuses the clearing write, and a silent failure just
+  // looks like the button does nothing (the banner returns on refresh).
+  const onDiscard = () => void clearCheckpoint().then(refreshCheckpoint).catch(reportError);
 
   return { checkpoint, running, run, onResume, onPause, onDiscard };
 }
