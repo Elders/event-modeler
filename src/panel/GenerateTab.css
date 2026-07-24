@@ -1,0 +1,40 @@
+/* The source toggle for the Generate tab: Text vs Figma. A segmented pill,
+   deliberately unlike the underline tab bar above it, so the two levels of
+   navigation don't read as one. */
+
+.gen-source {
+  display: flex;
+  gap: 3px;
+  margin: 12px 0;
+  padding: 3px;
+  background: var(--em-line);
+  border-radius: 8px;
+}
+
+.gen-source-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--em-muted);
+  cursor: pointer;
+}
+
+.gen-source-btn:hover:not(:disabled) {
+  color: var(--em-ink);
+}
+
+.gen-source-btn-active {
+  background: #fff;
+  color: #4262ff;
+  box-shadow: 0 1px 2px rgba(5, 0, 56, 0.12);
+}
+
+.gen-source-btn:disabled {
+  cursor: default;
+}

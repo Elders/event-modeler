@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { BuildingBlocksSection } from './BuildingBlocksSection';
 import { ConsoleSection } from './ConsoleSection';
 import { ConvertSection } from './ConvertSection';
-import { GenerateSection } from './GenerateSection';
+import { GenerateTab } from './GenerateTab';
 import { PanelFooter } from './PanelFooter';
 import { PanelTabs, type PanelTabId } from './PanelTabs';
 import { PatternsSection } from './PatternsSection';
@@ -43,7 +43,7 @@ export function Panel() {
         ) : tab === 'properties' ? (
           <PropertiesSection />
         ) : tab === 'generate' ? (
-          <GenerateSection busy={busy} guard={guard} />
+          <GenerateTab busy={busy} guard={guard} />
         ) : (
           <ConsoleSection />
         )}

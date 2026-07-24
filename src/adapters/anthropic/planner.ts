@@ -60,10 +60,36 @@ export class AnthropicPlanner implements Planner {
     writeSettings(settings);
   }
 
-  async plan(text: string, signal?: AbortSignal): Promise<ModelPlan> {
+  async plan(text: string, signal?: AbortSignal, systemSuffix?: string): Promise<ModelPlan> {
     const trimmed = text.trim();
     if (!trimmed) throw new Error('Paste some text to model first.');
+    return this.complete(trimmed, systemSuffix, signal);
+  }
 
+  async planFromImages(
+    images: string[],
+    text: string,
+    signal?: AbortSignal,
+    systemSuffix?: string,
+  ): Promise<ModelPlan> {
+    if (images.length === 0) throw new Error('No pages to model.');
+    // Images first (in order), then a text block with the accompanying notes.
+    const content: Anthropic.ContentBlockParam[] = images.map((data) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/png', data },
+    }));
+    if (text.trim()) content.push({ type: 'text', text: text.trim() });
+    return this.complete(content, systemSuffix, signal);
+  }
+
+  // The shared request: build the system prompt (preamble + any per-call suffix),
+  // send the content (a string for text, blocks for vision) under the plan schema,
+  // and coerce the response through the domain's normalizePlan trust boundary.
+  private async complete(
+    content: string | Anthropic.ContentBlockParam[],
+    systemSuffix: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<ModelPlan> {
     const { apiKey, model, preamble } = readSettings();
     if (!apiKey.trim()) {
       throw new Error('Add your Anthropic API key in the panel settings first.');
@@ -71,21 +97,31 @@ export class AnthropicPlanner implements Planner {
 
     const client = new Anthropic({ apiKey: apiKey.trim(), dangerouslyAllowBrowser: true });
 
+    // `readSettings` guarantees the preamble is non-empty (a blank one falls back
+    // to SYSTEM_PROMPT). The suffix is the per-source guidance (Figma / PDF).
+    const system = systemSuffix ? `${preamble}\n\n${systemSuffix}` : preamble;
+
     let message: Anthropic.Message;
     try {
-      message = await client.messages.create(
+      // Stream rather than a single call: at a 32k-token budget the SDK refuses a
+      // non-streaming request up front (it may exceed its 10-minute ceiling).
+      // finalMessage() accumulates the stream back into the same Message shape,
+      // so the rest of this method is unchanged.
+      const stream = client.messages.stream(
         {
           model,
-          max_tokens: 16000,
-          // The user's preamble; `readSettings` guarantees it's non-empty
-          // (a blank one falls back to SYSTEM_PROMPT).
-          system: preamble,
-          messages: [{ role: 'user', content: trimmed }],
+          // Headroom so a multi-screen vision plan (plus adaptive thinking, which
+          // shares this budget) finishes rather than truncating mid-JSON. A
+          // ceiling, not a target — unused tokens aren't charged.
+          max_tokens: 32000,
+          system,
+          messages: [{ role: 'user', content }],
           output_config: { format: { type: 'json_schema', schema: PLAN_SCHEMA } },
           ...(this.supportsAdaptive(model) ? { thinking: { type: 'adaptive' as const } } : {}),
         },
         { signal },
       );
+      message = await stream.finalMessage();
     } catch (error) {
       throw new Error(describeError(error));
     }
@@ -100,6 +136,14 @@ export class AnthropicPlanner implements Planner {
     try {
       parsed = JSON.parse(json);
     } catch {
+      // With a JSON schema constraining the output, a parse failure means the
+      // response was cut off — say so, and how to fix it, instead of "not valid
+      // JSON" (which reads as a fluke to "try again").
+      if (message.stop_reason === 'max_tokens') {
+        throw new Error(
+          'Claude ran out of output space before finishing the model — try fewer pages or screens per import.',
+        );
+      }
       throw new Error('Claude returned a response that was not valid JSON — try again.');
     }
 

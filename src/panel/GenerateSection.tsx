@@ -1,17 +1,14 @@
 // Generate a model from pasted text. A textarea + button drive the
-// `generateModel` feature; generation can be paused mid-build and resumed —
-// a paused build (interrupted by Pause, a reload, or a failure) is persisted on
-// the board, so a banner offers Resume/Discard until it's finished. A
+// `generateModel` feature; the run/pause/resume machinery is shared with the
+// Figma import via useGeneration + GenerationControls (a paused build shows a
+// Resume/Discard banner until it's finished, whatever produced it). A
 // collapsible settings block holds the Anthropic API key (stored per-browser,
-// never on the board), the model picker, and the editable preamble (the system
-// prompt sent to Claude).
+// never on the board), the model picker, and the editable preamble.
 
 import './GenerateSection.css';
-import { useEffect, useRef, useState } from 'react';
-import type { GenerationCheckpoint } from '../domain/plan';
+import { useEffect, useState } from 'react';
 import { failureReason, reportToLog } from '../features/diagnostics';
-import { generateModel, resumeGeneration } from '../features/generate';
-import { clearCheckpoint, loadCheckpoint } from '../features/generateCheckpoint';
+import { generateModel } from '../features/generate';
 import {
   getPlannerSettings,
   isPlannerConfigured,
@@ -20,16 +17,11 @@ import {
   savePlannerSettings,
 } from '../features/plannerSettings';
 import type { PlannerSettings } from '../ports/planner';
+import { GenerationControls } from './GenerationControls';
 import { ModelPicker } from './ModelPicker';
 import { PreambleEditor } from './PreambleEditor';
 import type { Guard } from './useBusyGuard';
-
-function resumeLabel(checkpoint: GenerationCheckpoint): string {
-  if (!checkpoint.plan) return 'Generation paused before building.';
-  const done = checkpoint.progress.slice;
-  const total = checkpoint.plan.slices.length;
-  return `Generation paused — ${done} of ${total} slice${total === 1 ? '' : 's'} done.`;
-}
+import { useGeneration } from './useGeneration';
 
 // The stored settings, or the reason they couldn't be read. Reading them can
 // fail (storage blocked, or the stored value unreadable), and a failure must not
@@ -69,15 +61,7 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
   // the key looked accepted and simply wasn't there next time.
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // A paused build persisted on the board (null = none), and whether *our* run
-  // is currently active. The abort controller is held across renders so Stop can
-  // reach it while the guarded run is in flight.
-  const [checkpoint, setCheckpoint] = useState<GenerationCheckpoint | null>(null);
-  const [running, setRunning] = useState(false);
-  const controllerRef = useRef<AbortController | null>(null);
-
-  const refreshCheckpoint = () => void loadCheckpoint().then(setCheckpoint);
-  useEffect(refreshCheckpoint, []);
+  const { checkpoint, running, run, onResume, onPause, onDiscard } = useGeneration(guard);
 
   const persist = (next: PlannerSettings) => {
     try {
@@ -94,28 +78,7 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
   };
 
   const canGenerate = configured && text.trim().length > 0;
-
-  // Wrap a run in the shared busy guard (so the rest of the panel is locked and
-  // real errors toast), plus our own running state + a fresh abort controller.
-  // Pause is deliberately NOT guarded — it just trips the controller.
-  const run = (action: (signal: AbortSignal) => Promise<void>) =>
-    guard(async () => {
-      const controller = new AbortController();
-      controllerRef.current = controller;
-      setRunning(true);
-      try {
-        await action(controller.signal);
-      } finally {
-        controllerRef.current = null;
-        setRunning(false);
-        refreshCheckpoint();
-      }
-    });
-
   const onGenerate = run((signal) => generateModel(text, signal));
-  const onResume = run((signal) => resumeGeneration(signal));
-  const onPause = () => controllerRef.current?.abort();
-  const onDiscard = () => void clearCheckpoint().then(refreshCheckpoint);
 
   return (
     <section className="section">
@@ -131,42 +94,19 @@ export function GenerateSection({ busy, guard }: { busy: boolean; guard: Guard }
         disabled={running}
       />
 
-      {running ? (
-        <div className="generate-actions">
-          <button className="button button-primary button-small generate-grow" type="button" disabled>
-            Generating…
-          </button>
-          <button className="button button-small" type="button" onClick={onPause}>
-            Pause
-          </button>
-        </div>
-      ) : checkpoint ? (
-        <div className="generate-resume">
-          <p className="generate-resume-text">{resumeLabel(checkpoint)}</p>
-          <div className="generate-actions">
-            <button
-              className="button button-primary button-small generate-grow"
-              type="button"
-              disabled={busy || !configured}
-              onClick={onResume}
-            >
-              Resume
-            </button>
-            <button className="button button-small" type="button" disabled={busy} onClick={onDiscard}>
-              Discard
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          className="button button-primary button-small w-full"
-          type="button"
-          disabled={busy || !canGenerate}
-          onClick={onGenerate}
-        >
-          Generate model
-        </button>
-      )}
+      <GenerationControls
+        running={running}
+        checkpoint={checkpoint}
+        busy={busy}
+        idleLabel="Generate model"
+        runningLabel="Generating…"
+        canRun={canGenerate}
+        onRun={onGenerate}
+        canResume={configured}
+        onPause={onPause}
+        onResume={onResume}
+        onDiscard={onDiscard}
+      />
 
       {!configured && load.ok && (
         <p className="footnote">Add your Anthropic API key in settings below to enable this.</p>

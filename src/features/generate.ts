@@ -17,7 +17,7 @@
 
 import { blockPosition, placeSlices, type GenerationCheckpoint, type ModelPlan } from '../domain/plan';
 import type { CanvasElement } from '../ports/canvas';
-import { isHostUnavailable } from '../ports/errors';
+import { isHostUnavailable, isStorageFull } from '../ports/errors';
 import { services } from '../services';
 import { connect } from './connectors';
 import { createBlock } from './createBlock';
@@ -38,10 +38,34 @@ import { placeLinkedCopies, placeZoneCards } from './specs/copies';
 
 const aborted = (signal?: AbortSignal): boolean => signal?.aborted === true;
 
+// Whether the resume checkpoint still fits the board's app-data budget. A large
+// model's plan can exceed it (~31 KB across all keys), and the checkpoint only
+// powers resume — the build itself wires up from in-memory state — so when a save
+// is refused for size we build ON without it rather than failing the whole model.
+// Reset per run; a single run at a time (the panel's busy guard serializes) makes
+// the module flag safe.
+let checkpointDisabled = false;
+
+async function save(checkpoint: GenerationCheckpoint): Promise<void> {
+  if (checkpointDisabled) return;
+  try {
+    await saveCheckpoint(checkpoint);
+  } catch (error) {
+    if (!isStorageFull(error)) throw error; // a genuine write failure must not be carried past
+    checkpointDisabled = true;
+    services().diagnostics.report(
+      'warn',
+      'Model too large to checkpoint on this board — building without resume (Stop or reload will not resume it).',
+      error,
+    );
+  }
+}
+
 // Start a fresh generation: capture a checkpoint, then plan + build under it.
 export async function generateModel(text: string, signal?: AbortSignal): Promise<void> {
   const trimmed = text.trim();
   if (!trimmed) throw new Error('Paste some text to model first.');
+  checkpointDisabled = false;
   const origin = await viewportCenter();
   const checkpoint: GenerationCheckpoint = {
     text: trimmed,
@@ -51,14 +75,35 @@ export async function generateModel(text: string, signal?: AbortSignal): Promise
     progress: { slice: 0, block: 0, links: 0, specs: 0 },
     pendingFields: [],
   };
-  await saveCheckpoint(checkpoint);
+  await save(checkpoint);
   await runGeneration(checkpoint, signal);
 }
 
 // Continue a paused generation from its persisted checkpoint.
 export async function resumeGeneration(signal?: AbortSignal): Promise<void> {
+  checkpointDisabled = false;
   const checkpoint = await loadCheckpoint();
   if (!checkpoint) return;
+  await runGeneration(checkpoint, signal);
+}
+
+// Build from an already-obtained plan (the Figma import path): capture a
+// checkpoint with the plan in place, then build under it. Shares the whole build
+// engine — checkpointing, resume, the on-board banner — with generateModel; the
+// only difference is where the plan came from (a design file, not prose).
+export async function buildFromPlan(plan: ModelPlan, signal?: AbortSignal): Promise<void> {
+  if (plan.slices.length === 0) throw new Error('Nothing to build — the plan has no blocks.');
+  checkpointDisabled = false;
+  const origin = await viewportCenter();
+  const checkpoint: GenerationCheckpoint = {
+    text: '',
+    origin,
+    plan,
+    refToId: {},
+    progress: { slice: 0, block: 0, links: 0, specs: 0 },
+    pendingFields: [],
+  };
+  await save(checkpoint);
   await runGeneration(checkpoint, signal);
 }
 
@@ -86,7 +131,7 @@ async function runGeneration(checkpoint: GenerationCheckpoint, signal?: AbortSig
       }
       checkpoint.plan = plan;
       checkpoint.text = ''; // the prose is only needed to re-plan; the plan supersedes it
-      await saveCheckpoint(checkpoint);
+      await save(checkpoint);
     }
     if (aborted(signal)) return; // stopped right after planning — resume picks up the build
     await buildModel(checkpoint, signal);
@@ -128,7 +173,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       });
       checkpoint.refToId[placement.slice.ref] = frame.id;
       blocks.set(placement.slice.ref, frame);
-      await saveCheckpoint(checkpoint);
+      await save(checkpoint);
     }
 
     const frameLeft = placement.centerX - placement.width / 2;
@@ -138,7 +183,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       if (aborted(signal)) return await pause(checkpoint, { slice: i, block: j });
       const block = placement.slice.blocks[j];
       const { x, y } = blockPosition(placement, block);
-      const element = await createBlock(block.type, x, y, block.label);
+      const element = await createBlock(block.type, x, y, block.label, block.imageUrl);
       // Parent plain cards into the slice so they move with it. Screens and
       // automations are grouped title+image pairs — re-parenting would split
       // the group, so they rely on the frame capturing them on creation.
@@ -169,7 +214,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       checkpoint.refToId[block.ref] = element.id;
       blocks.set(block.ref, element);
       checkpoint.progress = { ...checkpoint.progress, slice: i, block: j + 1 };
-      await saveCheckpoint(checkpoint);
+      await save(checkpoint);
     }
 
     // Slice complete: flush its field records (one write per slice), advance.
@@ -179,7 +224,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       checkpoint.pendingFields = [];
     }
     checkpoint.progress = { ...checkpoint.progress, slice: i + 1, block: 0 };
-    await saveCheckpoint(checkpoint);
+    await save(checkpoint);
   }
 
   // Phase 2 — links. Connectors use SDK defaults; not every element accepts an
@@ -202,7 +247,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       }
     }
     checkpoint.progress = { ...checkpoint.progress, links: i + 1 };
-    await saveCheckpoint(checkpoint);
+    await save(checkpoint);
   }
 
   // Phase 3 — specs. Each is placed inside its slice (growing it) and grows as
@@ -250,7 +295,7 @@ async function buildModel(checkpoint: GenerationCheckpoint, signal?: AbortSignal
       }
     }
     checkpoint.progress = { ...checkpoint.progress, specs: i + 1 };
-    await saveCheckpoint(checkpoint);
+    await save(checkpoint);
   }
 
   // Done — the whole plan is built. Clear the checkpoint and report.
@@ -277,5 +322,5 @@ async function pause(
   at: { slice: number; block: number },
 ): Promise<void> {
   checkpoint.progress = { ...checkpoint.progress, slice: at.slice, block: at.block };
-  await saveCheckpoint(checkpoint);
+  await save(checkpoint);
 }

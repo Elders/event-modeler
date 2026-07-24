@@ -5,6 +5,8 @@
 import { normalizeRecords, type FrameRecord } from '../domain/records';
 import { centerOf, expansionToInclude, type Box } from '../domain/viewport';
 import type { CanvasElement } from '../ports/canvas';
+import type { DesignSource } from '../ports/designSource';
+import type { PdfReader } from '../ports/pdfReader';
 import type { Planner } from '../ports/planner';
 import { services } from '../services';
 
@@ -15,6 +17,21 @@ export function requirePlanner(): Planner {
   const { planner } = services();
   if (!planner) throw new Error('The model generator is only available from the panel.');
   return planner;
+}
+
+// The DesignSource (Figma import) is likewise panel-only — the board script has
+// no use for it and stays free of the adapter. Same clear error off the panel.
+export function requireDesignSource(): DesignSource {
+  const { designSource } = services();
+  if (!designSource) throw new Error('Figma import is only available from the panel.');
+  return designSource;
+}
+
+// The PdfReader (PDF/vision import) is panel-only too.
+export function requirePdfReader(): PdfReader {
+  const { pdfReader } = services();
+  if (!pdfReader) throw new Error('PDF import is only available from the panel.');
+  return pdfReader;
 }
 
 export async function viewportCenter(): Promise<{ x: number; y: number }> {

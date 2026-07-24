@@ -57,3 +57,14 @@
 .panel-tab-dot-warn {
   background: var(--em-event);
 }
+
+/* "beta" marker on a tab. Kept tiny (the tab bar is tight across ~320px) and set
+   in the accent colour so it reads as a status, not part of the label. */
+.panel-tab-beta {
+  margin-left: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #4262ff;
+}

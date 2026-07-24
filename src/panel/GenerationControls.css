@@ -1,0 +1,18 @@
+/* The three-state build control shared by the text-generation and Figma-import
+   sources: an idle primary button, a running row (progress + Pause), or a resume
+   banner (Resume / Discard) for a build paused on the board. */
+
+.gen-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gen-grow {
+  flex: 1 1 auto;
+}
+
+.gen-resume-text {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--em-muted);
+}

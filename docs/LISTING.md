@@ -72,8 +72,8 @@ The chosen screenshots, in listing order. Export the PNGs into
 All three: tinted (soft-blue) background, full-bleed, within 1258×706, saved in
 [`branding/screenshots/`](../branding/screenshots/). The top Miro logo/Upgrade
 bar is cropped from all; #1 intentionally keeps the app panel + left toolbar to
-show the product UI. Optional future #4 (not yet shot): the Generate tab drafting
-a model from pasted text.
+show the product UI. Optional future #4 (not yet shot): the Generate tab *(beta)*
+drafting a model from pasted text.
 
 ## Scopes
 

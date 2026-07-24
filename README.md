@@ -34,10 +34,14 @@ and **Navigate to** pans the viewport to either end.
 
 ![Arrow toolset — copy or replace fields across a connector](docs/images/panel-arrow.png)
 
-**Generate** — paste a description of a system or workflow and Claude drafts a
-whole model: typed blocks in three lanes, connectors, slices, and Given/When/Then
-specifications. Your Anthropic API key is stored only in this browser (never on
-the board); pick a model and, if you want, edit the system-prompt preamble.
+**Generate** *(beta)* — paste a description of a system or workflow (or import a
+Figma file or exported design PDFs) and Claude drafts a whole model: typed blocks
+in three lanes, connectors, slices, and Given/When/Then specifications. Your
+Anthropic API key is stored only in this browser (never on the board); pick a
+model and, if you want, edit the system-prompt preamble.
+> **Beta.** AI-drafted models are a starting point to refine, not a finished
+> model — accuracy varies by source, and a large design can exceed a single
+> board's storage.
 
 ![Generate tab — draft a model from pasted text](docs/images/panel-generate.png)
 

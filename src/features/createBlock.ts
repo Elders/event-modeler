@@ -7,7 +7,7 @@ import type { CanvasElement } from '../ports/canvas';
 import { createAutomation } from './automation';
 import { insertChapter } from './chapter';
 import { viewportCenter } from './helpers';
-import { createSketchScreen } from './screens';
+import { createScreenFromImage, createSketchScreen } from './screens';
 import { createSlice } from './slices';
 import { createSpecification } from './specs/create';
 import { createSticky } from './stickies';
@@ -18,9 +18,15 @@ export async function createBlock(
   x: number,
   y: number,
   label?: string,
+  // A screen's real render (the Figma import); ignored by every other type.
+  imageUrl?: string,
 ): Promise<CanvasElement> {
   if (type === 'automation') return createAutomation(x, y, label);
-  if (type === 'screen') return createSketchScreen(x, y, label);
+  if (type === 'screen') {
+    return imageUrl
+      ? createScreenFromImage(x, y, label ?? 'Screen', imageUrl)
+      : createSketchScreen(x, y, label);
+  }
   if (type === 'slice') return createSlice(x, y);
   // The three branches above narrow `type` to the sticky-card types here.
   return createSticky(type, x, y, label);

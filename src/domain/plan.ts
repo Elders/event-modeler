@@ -74,6 +74,11 @@ export interface PlannedBlock {
   column: number;
   // Data the block carries (name + type); empty for blocks without data.
   fields: PlannedField[];
+  // A screen block's real render (a Figma frame PNG), used in place of the
+  // sketch placeholder. Absent for AI-from-text plans; bound by the Figma import
+  // after planning. Carried as an https URL only (see normalizePlan) — the host
+  // fetches and stores it at creation, so a temporary render URL is fine.
+  imageUrl?: string;
 }
 
 export interface PlannedSlice {
@@ -204,6 +209,9 @@ export function normalizePlan(raw: unknown): ModelPlan {
 
       const label = asString(b.label) || STICKY_LABEL[type as StickyBlockType] || type;
       const column = Number.isFinite(b.column) ? Math.max(0, Math.floor(b.column as number)) : 0;
+      // Only an https render survives — the plan is re-read from the checkpoint
+      // on resume, so validate on the way back in (the documented trust boundary).
+      const imageUrl = asString(b.imageUrl);
       blocks.push({
         ref: blockRef,
         type,
@@ -211,6 +219,7 @@ export function normalizePlan(raw: unknown): ModelPlan {
         lane: asLane(b.lane, DEFAULT_LANE[type]),
         column,
         fields: normalizeFields(b.fields),
+        ...(imageUrl.startsWith('https://') ? { imageUrl } : {}),
       });
     }
     if (blocks.length === 0) continue;

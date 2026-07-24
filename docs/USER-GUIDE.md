@@ -47,10 +47,10 @@ tool and the app understands the result.
 1. Open a Miro board where the Event Modeler app is installed.
 2. Click the app's icon in Miro's left toolbar — the panel opens.
 3. The panel has four tabs: **Build** (the manual palette), **Properties**
-   (the name and fields of the selected element), **Generate** (draft a model
-   from text with AI), and **Console** (anything the app failed to do — the
-   tab marks itself when there's something to see, so you can ignore it until
-   it does).
+   (the name and fields of the selected element), **Generate** *(beta)* (draft a
+   model with AI — from text, a Figma file, or design PDFs), and **Console**
+   (anything the app failed to do — the tab marks itself when there's something
+   to see, so you can ignore it until it does).
 
 The app is an assistant, not a replacement for Miro: everything it places is
 an ordinary Miro item afterward. You move, resize, relabel, restyle, connect,
@@ -381,11 +381,18 @@ belonged to it (labels, buttons, copies) — no debris left behind.
 
 ---
 
-## 7. The Generate tab (AI drafting)
+## 7. The Generate tab (AI drafting) — beta
 
 Paste a prose description of a system — the app has Claude draft a complete
 model: slices along a timeline, typed blocks in their lanes, the arrows
 between them, fields on every block, and Given/When/Then specs per slice.
+
+> **Beta.** AI drafting is experimental: treat the output as a draft to refine,
+> not a finished model. Alongside pasted text, the tab's source toggle can also
+> draft from a **Figma file** or **exported design PDFs** — these are newer and
+> rougher (a static PDF has no prototype flow, so the workflow is inferred), and
+> a large design can exceed a single board's storage. Import a feature area at a
+> time.
 
 **One-time setup:** open **Settings** at the bottom of the tab and paste your
 Anthropic API key (get one at console.anthropic.com). The key is stored **only

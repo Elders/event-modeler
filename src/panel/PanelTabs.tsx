@@ -6,10 +6,10 @@ import './PanelTabs.css';
 
 export type PanelTabId = 'build' | 'properties' | 'generate' | 'console';
 
-const TABS: { id: PanelTabId; label: string }[] = [
+const TABS: { id: PanelTabId; label: string; beta?: boolean }[] = [
   { id: 'build', label: 'Build' },
   { id: 'properties', label: 'Properties' },
-  { id: 'generate', label: 'Generate' },
+  { id: 'generate', label: 'Generate', beta: true },
   { id: 'console', label: 'Console' },
 ];
 
@@ -51,6 +51,7 @@ export function PanelTabs({
             onClick={() => onChange(tab.id)}
           >
             {tab.label}
+            {tab.beta && <sup className="panel-tab-beta">beta</sup>}
             {indicator && <span className={`panel-tab-dot panel-tab-dot-${indicator}`} aria-hidden="true" />}
           </button>
         );

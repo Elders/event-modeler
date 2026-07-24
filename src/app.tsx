@@ -7,7 +7,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createAnthropicPlanner } from './adapters/anthropic';
 import { createCreditMeter, createDiagnostics } from './adapters/browser';
+import { createFigmaDesignSource } from './adapters/figma';
 import { createMiroServices } from './adapters/miro';
+import { createPdfReader } from './adapters/pdf';
 import { registerDrop } from './features/registerDrop';
 import { Panel } from './panel/Panel';
 import { configureServices } from './services';
@@ -28,6 +30,8 @@ configureServices({
   diagnostics: createDiagnostics('panel'),
   credits,
   planner: createAnthropicPlanner(),
+  designSource: createFigmaDesignSource(),
+  pdfReader: createPdfReader(),
 });
 registerDrop();
 

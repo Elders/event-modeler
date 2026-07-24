@@ -10,6 +10,7 @@
 // box became unrebuildable. A missing key is still a normal answer, and still
 // returns the fallback.
 
+import { StorageFullError } from '../../ports/errors';
 import type { Store } from '../../ports/store';
 import { withRateLimit } from './rateLimit';
 
@@ -20,8 +21,18 @@ export class MiroStore implements Store {
   }
 
   async write(key: string, value: unknown): Promise<void> {
-    await withRateLimit('appData', () =>
-      miro.board.setAppData(key, value as Parameters<typeof miro.board.setAppData>[1]),
-    );
+    try {
+      await withRateLimit('appData', () =>
+        miro.board.setAppData(key, value as Parameters<typeof miro.board.setAppData>[1]),
+      );
+    } catch (error) {
+      // Over the app-data budget is a distinct, sometimes-recoverable condition
+      // (a caller may drop optional data and carry on), so classify it — still a
+      // throw, never a swallow. Every other failure propagates unchanged.
+      if (error instanceof Error && /storage limit/i.test(error.message)) {
+        throw new StorageFullError(error.message, error);
+      }
+      throw error;
+    }
   }
 }

@@ -47,6 +47,12 @@ the line, placement above the model, no enforced layering.
 
 ## AI generator (the Generate tab)
 
+**Marked beta (2026-07-24).** The tab carries a `beta` badge (`PanelTabs`), and
+the user-facing docs say so. AI-drafted models are a draft to refine, and the
+newer design-import sources vary in quality — the PDF/vision path in particular
+infers the workflow (a static export has no prototype flow) and over-implies.
+Kept in place rather than removed, behind the beta label.
+
 Decisions the user made explicitly (2026-06-15), each chosen over an
 alternative that was offered:
 
@@ -84,6 +90,136 @@ Later additions (2026-06-18):
   so a paused or crashed build survives panel close / board reload and the
   panel offers Resume/Discard. The *build* truly resumes; the Claude request
   itself can only be cancelled and re-asked (the Messages API isn't resumable).
+
+## Figma import (2026-07-24)
+
+Draft a model from a Figma file, as a second *source* under the Generate tab
+(Text | Figma toggle) rather than a new tab — both produce the same `ModelPlan`
+and share one build engine. Full design in
+[FIGMA-IMPORT.md](FIGMA-IMPORT.md); the decisions that had real alternatives:
+
+- **Reuse `planner.plan`, don't add a `planFromDesign` method or vision.**
+  The Figma extraction is fed to the *existing* Anthropic planner — no new
+  planner method, no JSON-schema change, no second AI integration. Considered and
+  deferred: sending the frame PNGs to Claude (vision). Structured extraction
+  (frame names, labels, and the **prototype transitions** = the click-through
+  flow) grounds the model in facts for far fewer tokens; vision is Phase 2, only
+  as a fallback for files with no wired prototype.
+- **One prompt, split into a shared "how" and a Figma "how", not two prompts.**
+  The request is assembled as: the shared, user-editable system preamble (the
+  event-modeling vocabulary + output contract, identical for both sources) **+ a
+  `FIGMA_ADDENDUM`** appended to the system prompt for imports only (how to read
+  screens+flow — reuse each screen's ref, map a click to command→event→read
+  model, infer fields from labels), with `describeDesign` supplying the data
+  (screens + flow) in the user message. Rejected: a *separate* Figma system
+  prompt — ~90% would duplicate the shared modeling knowledge and drift, and it
+  wouldn't inherit the user's preamble edits (which are task-agnostic style, so
+  they *should* apply to both). `plan` gained an optional `systemSuffix` for this
+  — the text path passes nothing. Full reasoning in [FIGMA-IMPORT.md](FIGMA-IMPORT.md).
+- **Bind screen images to frames by ref, after planning.** Each frame gets a
+  stable ref; the prompt asks the planner to echo it as the screen block's ref;
+  `importFromFigma` then sets `block.imageUrl` from the frame's render (matching
+  by ref, falling back to label == frame name). Rejected alternative: letting the
+  model emit image URLs in its JSON — the model owns *structure*, the extraction
+  owns *grounding*; keeping the URL out of the model's hands means a bad URL
+  can't come from a hallucination. The URL rides on `PlannedBlock.imageUrl`
+  (validated https in `normalizePlan`) so the checkpoint carries it and
+  resume/interrupt work for a Figma import for free.
+- **Real Figma renders become the screen images.** Screens are already
+  image+title pairs, and Miro fetches an image URL server-side at creation and
+  stores it — so a temporary Figma render URL needs no browser CORS and becomes
+  permanent once placed. `createScreenFromImage` is the one new screen creator.
+- **Client-side, no accounts/billing backend.** BYO Figma personal access token
+  in `localStorage` (key `em.figma`), exactly like the Anthropic key — never
+  board app data. The token needs one scope: **`file_content:read`** (reads the
+  tree *and* renders frames); nothing is written to Figma, so no write scope.
+- **Call Figma directly; the dev proxy was a wrong turn.** `api.figma.com` sends
+  `access-control-allow-origin: *`, so the browser calls it directly from the
+  panel — production (a static host) does the same and works. `proxyUrl` is the
+  only override, for a user whose own network blocks the host.
+  - **The wrong turn, recorded so it isn't retried:** an early "empty response
+    for the file request (HTTP 200)" was misdiagnosed as an ad blocker
+    intercepting the third-party iframe request, and a same-origin Vite proxy
+    (`/figma` → `api.figma.com`) was added to route around it. The **response
+    headers disproved that** — real Figma CDN headers (`x-figma-rest-api-request-id`,
+    CloudFront) and `access-control-allow-origin: *` meant Figma was reachable
+    and CORS-open. The empty body was the **Vite proxy corrupting Figma's large,
+    chunked, `Connection: close` response** — headers relayed, body dropped.
+    Going direct fixed it immediately (the next error was a clean `429`, i.e. a
+    real authenticated request). Lesson: **read the response headers before
+    theorizing about the network**, and don't pipe large chunked responses
+    through the dev proxy. The `/figma` proxy stays in `vite.config.ts` only as
+    an opt-in `proxyUrl` target.
+  - **Corollary landmine (kept):** the adapter reads the body as text and reports
+    an empty 2xx as its own worded error — `response.json()` on a blank body
+    throws a bare "Unexpected end of JSON input" naming neither request nor cause.
+  - **429s name the wait.** Figma's file endpoint is cost-weighted and exposes
+    `Retry-After` cross-origin, so a burst of imports trips a `429` and the
+    adapter surfaces how long to wait (`rateLimitMessage`).
+- **One file read, plus a cache — not a shallow+/nodes split.** A `/nodes` split
+  (shallow `?depth=2` to list frames, then `/v1/files/:key/nodes` for only their
+  subtrees) was built to shrink the payload, then **reverted**. Figma's official
+  rate-limit docs settle it: the file-content limit is a **request *count***, not
+  a byte/credit budget — as low as **6 reads per *month*** on a View/Collab seat
+  (per-user, per the *file's* plan; regenerating the token doesn't reset it).
+  Under a count cap, the split is strictly worse — it spends **two** file-content
+  requests per import instead of one. The payload-size motive also evaporated once
+  the direct call replaced the body-mangling dev proxy. So: **a single
+  `GET /v1/files/:key`**, plus a **5-minute per-file-key cache** in
+  `FigmaDesignSource` (the unambiguous win — retries/re-imports of the same file
+  cost zero; kept short because render URLs are temporary). The split would only
+  pay off on a Dev/Full seat hitting *per-minute data-credit* limits on very large
+  files — not the common case. Don't re-add it without that specific reason.
+- **Two credentials, gated in the UI.** Import needs both the Figma token (to
+  read the file) and the Anthropic key (the planner drafts the model), so the
+  Figma section's settings surface both, and the Import button is disabled until
+  both are set. The key is the *same* per-browser planner setting the text
+  generator uses — editing it in either place is one value.
+- **Adapter propagates, per the codebase's #1 rule.** `adapters/figma` is the
+  only place the Figma API appears; a `403`/`404` (Figma *answered*) throws a
+  user-facing message, a `fetch` reject or `5xx` (Figma *unreachable*) throws
+  `HostUnavailableError`, and a frame with no render URL is a *value* (that
+  screen falls back to the placeholder), never an error. The
+  component-library guard (`looksLikeScreenFlow`) is likewise a value the
+  feature acts on — the honest floor, not the richer Phase 2 detector.
+
+## PDF / vision import (spike, 2026-07-24)
+
+A third Generate source (**Text | Figma | PDF**): draft a model from a design
+exported as PDF pages, fully local, no Figma API and no rate limit. Built as a
+spike after the Figma REST path hit the 6-reads/month seat cap.
+
+- **Vision, not extraction.** A static PDF export drops the prototype flow graph,
+  so there's nothing structured to parse. Instead the pages are rendered to PNGs
+  (`adapters/pdf`, pdf.js) and sent to Claude as **images** (`planner.planFromImages`,
+  multimodal + the same JSON schema). Claude reads the screens and infers the
+  model. The planner refactor shares one `complete()` between text and vision.
+- **Screens vs. notes (maintainer insight).** Designers often add text-heavy
+  *explanation* frames, not just screens. `VISION_ADDENDUM` tells Claude to
+  classify each page: a UI screen → a screen block; a note → **context** that
+  informs commands/events/flow (and partly *recovers* the flow the export lost).
+  Notes are never turned into screen blocks.
+- **Renders are deferred (the app-data landmine).** The obvious win of PDF over
+  `.fig` is real per-screen renders — but a full-page PNG as a data URL is far too
+  large to ride in the `ModelPlan`, which is checkpointed to board app data
+  (~tens-of-KB budget). So screens build as **placeholders** for now; binding the
+  real render needs a non-checkpointed path (create the Miro image at build time,
+  keep only a lightweight ref in the plan). Don't bake base64 into the plan.
+- **A large model's checkpoint is tolerated, not fatal (general).** A whole-design
+  import produces a big `ModelPlan`, and checkpointing it to `em-gen` can exceed
+  the app-data cap. The store now classifies that failure as `StorageFullError`
+  (ports/errors), and `generate.ts` drops the checkpoint and **builds on without
+  resume** (the build wires from in-memory state; the checkpoint only powers
+  resume) rather than failing the whole model — warning once via diagnostics.
+  This helps text and Figma imports too. It is NOT blanket tolerance: only the
+  optional checkpoint is dropped; the persistent registries (`em-fields`,
+  `em-slices`, `em-specs`) still propagate a full-budget failure, so a genuinely
+  huge design still hits the board's hard ceiling and must be imported in chunks.
+- **pdf.js is lazy-loaded.** ~1.7 MB (lib + worker), dynamically imported in the
+  adapter so Vite code-splits it out of the main panel bundle and entirely out of
+  the board script. The worker is bundled via `?url`.
+- Known gaps (Phase 2): render binding (above); inferred (not wired) flow, so
+  complex branching prototypes come out weaker than a REST/`.fig` import.
 
 ## Fields: the board display is authoritative (2026-07-15)
 

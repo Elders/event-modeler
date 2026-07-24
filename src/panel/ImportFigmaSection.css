@@ -1,7 +1,9 @@
-/* The "Generate from text" section: a prose textarea, the generate button, and
-   a collapsible settings block for the API key and model picker. */
+/* The "Import from Figma" source: a file-URL input and a collapsible settings
+   block for the Figma token and the shared Anthropic key. Mirrors the text
+   generator's form primitives, kept co-located so this section styles itself
+   whether or not the text section has ever mounted. */
 
-.generate-input {
+.figma-input {
   width: 100%;
   box-sizing: border-box;
   margin-bottom: 8px;
@@ -11,33 +13,32 @@
   font: inherit;
   font-size: 13px;
   color: var(--em-ink);
-  resize: vertical;
 }
 
-.generate-input:focus {
+.figma-input:focus {
   outline: none;
   border-color: #4262ff;
 }
 
-.generate-settings {
+.figma-settings {
   margin-top: 10px;
 }
 
-.generate-settings summary {
+.figma-settings summary {
   cursor: pointer;
   font-size: 12px;
   color: var(--em-muted);
   user-select: none;
 }
 
-.generate-label {
+.figma-label {
   display: block;
   margin: 10px 0 4px;
   font-size: 11px;
   color: var(--em-muted);
 }
 
-.generate-field {
+.figma-field {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px;
@@ -49,15 +50,15 @@
   background: #fff;
 }
 
-.generate-field:focus {
+.figma-field:focus {
   outline: none;
   border-color: #4262ff;
 }
 
-/* A settings read or write that failed. Deliberately not styled as a hint: an
-   empty key field alone reads as "never configured", which is the thing this
-   exists to contradict. */
-.generate-settings-error {
+/* A settings read or write that failed — not styled as a hint, for the same
+   reason as the text section: an empty field alone reads as "never configured",
+   which is the thing this exists to contradict. */
+.figma-settings-error {
   margin: 8px 0;
   padding: 6px 8px;
   border-left: 3px solid var(--em-error);

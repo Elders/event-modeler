@@ -1,43 +1,36 @@
-/* The "Generate from text" section: a prose textarea, the generate button, and
-   a collapsible settings block for the API key and model picker. */
+/* The "Import from PDF" source: a file picker and a collapsible settings block
+   for the shared Anthropic key + model. Mirrors the other AI sources' form
+   primitives, co-located so this section styles itself when mounted first. */
 
-.generate-input {
+.pdf-input {
+  display: block;
   width: 100%;
   box-sizing: border-box;
   margin-bottom: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--em-tile-border);
-  border-radius: 8px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--em-ink);
-  resize: vertical;
 }
 
-.generate-input:focus {
-  outline: none;
-  border-color: #4262ff;
-}
-
-.generate-settings {
+.pdf-settings {
   margin-top: 10px;
 }
 
-.generate-settings summary {
+.pdf-settings summary {
   cursor: pointer;
   font-size: 12px;
   color: var(--em-muted);
   user-select: none;
 }
 
-.generate-label {
+.pdf-label {
   display: block;
   margin: 10px 0 4px;
   font-size: 11px;
   color: var(--em-muted);
 }
 
-.generate-field {
+.pdf-field {
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px;
@@ -49,15 +42,12 @@
   background: #fff;
 }
 
-.generate-field:focus {
+.pdf-field:focus {
   outline: none;
   border-color: #4262ff;
 }
 
-/* A settings read or write that failed. Deliberately not styled as a hint: an
-   empty key field alone reads as "never configured", which is the thing this
-   exists to contradict. */
-.generate-settings-error {
+.pdf-settings-error {
   margin: 8px 0;
   padding: 6px 8px;
   border-left: 3px solid var(--em-error);

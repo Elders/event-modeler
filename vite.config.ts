@@ -14,6 +14,20 @@ export default defineConfig({
   base: './',
   server: {
     port: 3000,
+    // Same-origin proxy for the Figma REST API in dev. A browser ad blocker /
+    // privacy extension / VPN intercepts a third-party request to
+    // api.figma.com from the Miro panel iframe and hands back a blank 200, so
+    // the Figma import can't call it directly. Routing through `/figma` keeps
+    // the browser request same-origin (localhost) — out of any blocker's reach
+    // — and Vite performs the real Figma fetch server-side in Node. The Figma
+    // adapter targets this base automatically in dev (see adapters/figma/source).
+    proxy: {
+      '/figma': {
+        target: 'https://api.figma.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/figma/, ''),
+      },
+    },
   },
   build: {
     rollupOptions: {

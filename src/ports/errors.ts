@@ -23,3 +23,23 @@ export class HostUnavailableError extends Error {
 export function isHostUnavailable(error: unknown): boolean {
   return error instanceof HostUnavailableError;
 }
+
+// The board's app-data budget is a hard total cap (~31 KB across all keys, see
+// DECISIONS.md), and a write that goes over it fails distinctly. This is the one
+// write failure a caller may legitimately carry on past: the generation build
+// drops its (optional) resume checkpoint rather than failing the whole build —
+// but only for THIS condition, never a genuine write failure. Same shape and
+// same purpose as HostUnavailableError: a named condition to branch on.
+export class StorageFullError extends Error {
+  readonly reason: unknown;
+
+  constructor(message: string, reason: unknown) {
+    super(message);
+    this.name = 'StorageFullError';
+    this.reason = reason;
+  }
+}
+
+export function isStorageFull(error: unknown): boolean {
+  return error instanceof StorageFullError;
+}

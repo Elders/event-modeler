@@ -28,7 +28,22 @@ export interface Planner {
   // Produce a model plan from prose. Throws with a user-facing message if the
   // planner is not configured or the request fails. An optional AbortSignal
   // cancels the in-flight request (the generation feature aborts it on Stop).
-  plan(text: string, signal?: AbortSignal): Promise<ModelPlan>;
+  // `systemSuffix` is appended to the configured system prompt for this one call
+  // — the Figma import uses it to teach how to read its screens+flow input,
+  // keeping the shared preamble (and the user's edits to it) in force with no
+  // second prompt to maintain. The text path passes nothing.
+  plan(text: string, signal?: AbortSignal, systemSuffix?: string): Promise<ModelPlan>;
+
+  // Like `plan`, but from page images (base64 PNG, no data: prefix) plus
+  // accompanying text — the PDF/vision import. `systemSuffix` carries the guidance
+  // for reading the pages (screens vs. notes, inferred flow). Same schema, same
+  // ModelPlan out.
+  planFromImages(
+    images: string[],
+    text: string,
+    signal?: AbortSignal,
+    systemSuffix?: string,
+  ): Promise<ModelPlan>;
 
   // The built-in model list — what the picker offers before a live list could
   // be fetched (no key configured yet, or the fetch failed).
