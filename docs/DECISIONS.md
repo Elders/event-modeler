@@ -682,6 +682,59 @@ single app registration and repoint its App URL between the local and
 deployed address, rather than keeping two permanent registrations that will
 silently diverge on every tagged element and registry.
 
+### App-placed chrome positions in absolute space (2026-07-24)
+
+**The bug.** "A bug sends the fields list of a screen or automation to an
+arbitrary place on the board. The group is still kept but the fields list is not
+below the icon. This is not happening on a simple board."
+
+**The cause.** CanvasElement coordinates are **local** (the Canvas port
+contract): frame-relative when the element is a child of a frame, absolute
+otherwise. A screen/automation dropped inside a slice is captured by that frame,
+so its `x`/`y` become small numbers measured from the frame's top-left.
+`boxLayout` computed the attached fields box straight from `element.x`/
+`element.y` and created the box **unparented** — so those frame-relative numbers
+were written as absolute coordinates, dropping the box near the board origin. On
+a simple board nothing is parented, every element's coords are already absolute,
+and the box lands correctly — which is exactly why it "doesn't happen on a simple
+board." The second, subtler half: even a correctly placed box was then dragged
+off on the next `fieldsHousekeeping` pass, which compared `box.x` to `element.x`
+across two different coordinate spaces.
+
+**The rule.** Any app-placed chrome positioned at a fixed offset from an anchor
+element — the fields box under a screen, a slice's add-spec button, the title
+above a screen — is a **separate element with its own parent**, and the anchor
+and the chrome can be in **different** spaces (one inside a slice, one not). So
+the geometry relating them must go through the one frame of reference they share:
+absolute.
+
+**The fix** (`features/fields/render.ts` + `housekeeping.ts`, `features/helpers.ts`):
+
+- Convert the anchor's local coords up to absolute (`absoluteCenter`, or the pure
+  `absoluteCenterIn` for callers that batch their parent fetches), compute the
+  target in absolute, then convert back down into the box's **own** parent space
+  (`localCenterIn`) before writing.
+- `settle` a freshly created box, exactly as screens and their titles already do
+  — a shape created over a slice can be auto-captured and shifted by the frame's
+  top-left, and `settle` re-pins it to the intended absolute spot.
+- The housekeeping pass fetches every element/box's parent frame once per tick
+  and re-docks in absolute space, so a box captured by a slice is no longer
+  dragged off — and a box already flung off by the old code snaps back on the
+  next pass (the fix self-heals existing boards; no cleanup step needed).
+
+**Why not parent the box into the slice instead.** The box is grouped with the
+screen so it travels when the screen is moved; per the note in `generate.ts`,
+`addToContainer` on an already-grouped item splits the group, so co-parenting the
+box and reasoning purely in the frame's space would fight the grouping. Absolute
+is the one basis the framed *and* the below-the-frame case share, and it needs no
+re-parenting.
+
+Same class of Miro-SDK reality as the app-data budget and the per-method credit
+weights: a platform fact the hexagonal layers must encode, not paper over. The
+arrow toolset already met the *read* side of it — "Frame children carry
+parent-relative coordinates, so bounds are resolved to absolute through the parent
+frame" (see *The arrow toolset* below); this is the *write* side.
+
 ## Failures are reported, never fabricated (2026-07-16)
 
 **The bug.** "After a while, selecting an element with fields shows nothing in
