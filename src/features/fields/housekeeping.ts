@@ -4,12 +4,14 @@
 // re-docks boxes that drifted. Polling is the only option — there are no
 // item-update or item-delete events.
 
-import { FIELDS_BOX_GAP, fieldsBoxHeight, parseBoxFields, sameFields } from '../../domain/fields';
+import { parseBoxFields, sameFields } from '../../domain/fields';
 import { type FieldRecord } from '../../domain/records';
+import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
+import { absoluteCenterIn, localCenterIn } from '../helpers';
 import { isFieldsBox, rememberFieldsBox } from './boxTags';
 import { displayMode, readFieldRecords, writeFieldRecords } from './model';
-import { removeFieldsDisplay, renderFields } from './render';
+import { boxLayout, removeFieldsDisplay, renderFields } from './render';
 
 let running = false;
 
@@ -41,6 +43,18 @@ async function doFieldsHousekeeping(): Promise<void> {
     if (record.card) ids.add(record.card);
   }
   const live = new Map((await canvas.get([...ids])).map((el) => [el.id, el] as const));
+
+  // Parent frames of every live element and box, fetched once. The box re-dock
+  // reasons in absolute space: a screen and its box can each sit in a slice (or
+  // one in, one out), so each reports coords relative to its own parent, and
+  // element.x/element.y can't be compared to box.x/box.y directly.
+  const parentIds = new Set<string>();
+  for (const el of live.values()) if (el.parentId) parentIds.add(el.parentId);
+  const frames = new Map(
+    (parentIds.size > 0 ? await canvas.get([...parentIds]) : []).map((f) => [f.id, f] as const),
+  );
+  const parentOf = (el: CanvasElement): CanvasElement | null =>
+    el.parentId ? (frames.get(el.parentId) ?? null) : null;
 
   const survivors: FieldRecord[] = [];
   let dirty = false;
@@ -91,15 +105,19 @@ async function doFieldsHousekeeping(): Promise<void> {
       // edit changes the line count but Miro never resizes the shape) and keep
       // it centered under the element. Size and position only — the content is
       // never rewritten here, so an edit in progress can't be clobbered; the
-      // text normalizes on the next panel save.
-      const height = fieldsBoxHeight(parsed.length);
-      const y = element.y + element.height / 2 + FIELDS_BOX_GAP + height / 2;
+      // text normalizes on the next panel save. Compared and written in absolute
+      // space (via each element's parent frame), then converted back into the
+      // box's own space, so a box captured by a slice isn't dragged off.
+      const center = absoluteCenterIn(element, parentOf(element));
+      const { x: targetX, y: targetY, height } = boxLayout(element, center, parsed.length);
+      const boxCenter = absoluteCenterIn(box, parentOf(box));
       if (
         Math.abs(box.height - height) > 1 ||
-        Math.abs(box.x - element.x) > 1 ||
-        Math.abs(box.y - y) > 1
+        Math.abs(boxCenter.x - targetX) > 1 ||
+        Math.abs(boxCenter.y - targetY) > 1
       ) {
-        await canvas.apply([{ id: box.id, x: element.x, y, height }]);
+        const local = localCenterIn(targetX, targetY, parentOf(box));
+        await canvas.apply([{ id: box.id, x: local.x, y: local.y, height }]);
       }
     } else if (record.fields.length === 0) {
       // The box is gone and the record holds no fields — rebuilding would

@@ -33,8 +33,31 @@ export async function ensureVisible(boxes: Box[]): Promise<void> {
 export async function absoluteCenter(el: CanvasElement): Promise<{ x: number; y: number }> {
   if (!el.parentId) return { x: el.x, y: el.y };
   const [parent] = await services().canvas.get([el.parentId]);
-  if (!parent || parent.kind !== 'container') return { x: el.x, y: el.y };
+  return absoluteCenterIn(el, parent ?? null);
+}
+
+// Local → absolute using an already-fetched parent frame (null when the element
+// has no parent, or the parent isn't a frame). The pure form of absoluteCenter,
+// for callers that batch their parent fetches (the fields housekeeping pass).
+export function absoluteCenterIn(
+  el: CanvasElement,
+  parent: CanvasElement | null,
+): { x: number; y: number } {
+  if (!el.parentId || !parent || parent.kind !== 'container') return { x: el.x, y: el.y };
   return { x: parent.x - parent.width / 2 + el.x, y: parent.y - parent.height / 2 + el.y };
+}
+
+// Absolute → local: the inverse, expressing an absolute point in a child's own
+// coordinate space within the given frame (the point itself when there is no
+// frame). Used to write an absolute target — the box's docked position — back
+// into whatever frame has captured the box.
+export function localCenterIn(
+  absX: number,
+  absY: number,
+  parent: CanvasElement | null,
+): { x: number; y: number } {
+  if (!parent || parent.kind !== 'container') return { x: absX, y: absY };
+  return { x: absX - (parent.x - parent.width / 2), y: absY - (parent.y - parent.height / 2) };
 }
 
 // Puts an editable title above an element (screens, automations) and groups the

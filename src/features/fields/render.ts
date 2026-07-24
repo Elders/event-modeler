@@ -16,6 +16,7 @@ import {
 } from '../../domain/fields';
 import type { CanvasElement } from '../../ports/canvas';
 import { services } from '../../services';
+import { absoluteCenter, localCenterIn } from '../helpers';
 import { forgetFieldsBox, rememberFieldsBox } from './boxTags';
 import { displayMode, type FieldRecord } from './model';
 
@@ -23,16 +24,24 @@ const BOX_FILL = '#ffffff';
 const BOX_BORDER = '#dcdce5';
 const BOX_TEXT = '#1a1a2e';
 
-// Position the box centered under the element, leaving FIELDS_BOX_GAP between
-// the element's bottom edge and the box's top edge.
-function boxLayout(element: CanvasElement, fieldCount: number) {
+// The box sits centered under the element, FIELDS_BOX_GAP below its bottom edge.
+// Position is returned in ABSOLUTE coordinates: the element may be a child of a
+// slice frame — in which case its own x/y are frame-relative — and the box is a
+// separate element with its own, possibly different, parent, so absolute is the
+// only frame of reference the two share. `center` is the element's absolute
+// center; the box's parent decides how the result is written back to the board.
+export function boxLayout(
+  element: CanvasElement,
+  center: { x: number; y: number },
+  fieldCount: number,
+) {
   const width = Math.max(element.width, FIELDS_BOX_MIN_WIDTH);
   const height = fieldsBoxHeight(fieldCount);
   return {
     width,
     height,
-    x: element.x,
-    y: element.y + element.height / 2 + FIELDS_BOX_GAP + height / 2,
+    x: center.x,
+    y: center.y + element.height / 2 + FIELDS_BOX_GAP + height / 2,
   };
 }
 
@@ -62,17 +71,20 @@ async function upsertBox(
   existingId: string | null,
 ): Promise<string> {
   const { canvas } = services();
-  const { x, y, width, height } = boxLayout(element, fields.length);
+  const { x, y, width, height } = boxLayout(element, await absoluteCenter(element), fields.length);
   const content = fieldsBoxContent(fields);
 
   if (existingId) {
     const [box] = await canvas.get([existingId]);
     if (box && box.kind === 'shape') {
+      // x/y are absolute; the box has its own parent (a slice can capture it),
+      // so write the target in the box's own space rather than the element's.
+      const local = await toBoxLocal(box, x, y);
       await canvas.apply([
         {
           id: box.id,
-          x,
-          y,
+          x: local.x,
+          y: local.y,
           width,
           height,
           content,
@@ -105,6 +117,12 @@ async function upsertBox(
   // locally too saves those lookups a metadata read for a box we just tagged.
   await canvas.setMeta(box.id, { type: 'fields-box' });
   rememberFieldsBox(box.id);
+  // A box created over a slice frame can be auto-captured, its coordinates then
+  // read as frame-relative though we supplied absolute — re-pin it to the
+  // intended absolute spot, exactly as screens and their titles do (see
+  // createSketchScreen / addTitleAbove). Without this, a box that lands inside a
+  // slice on creation is shifted by the frame's top-left.
+  await canvas.settle(box.id, x, y);
   // Group the box with the element *and its existing group members* — a screen
   // or automation is already a title+image group, so grouping the box with the
   // image alone would split the image out and orphan the title. Re-grouping the
@@ -114,6 +132,20 @@ async function upsertBox(
   const members = await canvas.groupMembers(element.id);
   await canvas.group([...new Set([...members, box.id])]);
   return box.id;
+}
+
+// An absolute point expressed in a box's own coordinate space — the point
+// itself when the box is unparented, or frame-relative when a slice has
+// captured it. The one write path that has to bridge the box's space and the
+// element's, since the two can have different parents.
+async function toBoxLocal(
+  box: CanvasElement,
+  absX: number,
+  absY: number,
+): Promise<{ x: number; y: number }> {
+  if (!box.parentId) return { x: absX, y: absY };
+  const [parent] = await services().canvas.get([box.parentId]);
+  return localCenterIn(absX, absY, parent ?? null);
 }
 
 // Clears an element's field display: removes the box (box mode), or rewrites the
